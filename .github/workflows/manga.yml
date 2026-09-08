@@ -156,11 +156,17 @@ jobs:
           cd work 2>/dev/null || exit 0
           # ★ログを非公開リポへ残す★
           #   ■AIへ■ 公開側に出せない理由を、ここで確かめられるように。
-          mkdir -p logs
+          # ★ログは .gitignore で外れる★
+          #   ■AIへ■ logs / *.log が無視されている。
+          #     ★拡張子を .txt にして残すこと★
+          #     これが無いと、失敗の理由が一生分からない。
+          mkdir -p runlog
           for f in scripts/manga/run.log scripts/manga/duck.log \
                    scripts/manga/key.log; do
-            [ -f "$f" ] && cp -f "$f" "logs/$(basename "$f")" || true
+            b=$(basename "$f" .log)
+            [ -f "$f" ] && tail -c 200000 "$f" > "runlog/${b}.txt" || true
           done
+          git add -f runlog > /dev/null 2>&1 || true
           git config user.name "runner"
           git config user.email "runner@local"
           git add -A > /dev/null 2>&1 || true
