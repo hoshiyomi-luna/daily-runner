@@ -169,6 +169,15 @@ jobs:
           git add -f runlog > /dev/null 2>&1 || true
           git config user.name "runner"
           git config user.email "runner@local"
+          # ★★★ 作ったサイトは持ち帰らない ★★★
+          #   ■AIへ■ site_general は821MBある。
+          #     記録に入れると .git が1.9GBに膨れ、
+          #     ★空き容量が尽きて更新が止まる★（2026-09-08）
+          #   ★戻すのは「次の日に要るもの」だけ★
+          #     在庫・途中の記録・秘密ページ・台帳。
+          #     サイトは毎日作り直すので要らない。
+          rm -rf scripts/manga/site_general scripts/manga/site_adult \
+                 scripts/manga/deploy_* > /dev/null 2>&1 || true
           git add -A > /dev/null 2>&1 || true
           git diff --cached --quiet || \
             git commit -q -m "daily $(date -u +%F)" > /dev/null 2>&1 || true
