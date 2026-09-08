@@ -1,0 +1,71 @@
+# ============================================================
+# 毎日の実行だけを担う。中身のコードは別の非公開リポジトリにある。
+#
+# ★なぜ公開なのか★
+#   非公開リポジトリの実行時間は月2,000分までで、既に使い切っている。
+#   公開リポジトリは標準の実行環境なら無制限で無料。
+#   ★コードは非公開のまま★ ここには何も置かない。
+#
+# ★見られても中身は分からない★
+#   ・このファイルには処理の中身を書かない
+#   ・出力は全部ファイルに逃がして画面に出さない
+#     （公開リポジトリは実行の記録も誰でも読めるため）
+#   ・鍵は秘密に入れてある。画面には自動で伏せられる
+# ============================================================
+name: daily
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: hoshiyomi-luna/shirouto-douga
+          token: ${{ secrets.SRC_TOKEN }}
+          path: src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: prepare
+        working-directory: src
+        run: |
+          pip install -q requests pillow cryptography pynacl playwright > /dev/null 2>&1 || true
+          python3 -m playwright install chromium > /dev/null 2>&1 || true
+
+      - name: run
+        working-directory: src
+        env:
+          DMM_API_ID: ${{ secrets.DMM_API_ID }}
+          DMM_AFFILIATE_ID: ${{ secrets.DMM_AFFILIATE_ID }}
+          DMM_AFFILIATE_ID_PUB: ${{ secrets.DMM_AFFILIATE_ID_PUB }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_APP_PW: ${{ secrets.BLUESKY_APP_PW }}
+          LIVEDOOR_KEY: ${{ secrets.LIVEDOOR_KEY }}
+          HATENA_ID: ${{ secrets.HATENA_ID }}
+          HATENA_BLOG_ID: ${{ secrets.HATENA_BLOG_ID }}
+          HATENA_KEY: ${{ secrets.HATENA_KEY }}
+          RAKUTEN_AFL: ${{ secrets.RAKUTEN_AFL }}
+          OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
+          GH: ${{ secrets.SRC_TOKEN }}
+        run: |
+          mkdir -p logs
+          # ★出力は全部ファイルへ★ 画面には出さない
+          bash tasks.sh > logs/run.txt 2>&1 || true
+          # 成否だけを出す（中身は出さない）
+          if grep -q "ALLDONE" logs/run.txt; then echo "ok"; else echo "check"; fi
+
+      - name: save log
+        if: always()
+        working-directory: src
+        env:
+          GH: ${{ secrets.SRC_TOKEN }}
+        run: python3 push_log.py > /dev/null 2>&1 || true
