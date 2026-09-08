@@ -68,6 +68,23 @@ jobs:
           npm i -g wrangler > /dev/null 2>&1 || true
           echo "  支度しました"
 
+      - name: GSCの鍵を置く
+        # ★★★ gsc_key.json は .gitignore に入っている ★★★
+        #   ■AIへ■ 非公開リポにも入っていないので、取り出せない。
+        #     ★Secretsから書き出すこと★
+        #     これが無いと Search Console の測定が動かない。
+        #   ★中身は絶対に出さない★ サービスアカウントの秘密鍵。
+        env:
+          GSC_KEY: ${{ secrets.GSC_KEY }}
+        run: |
+          cd work/scripts/manga 2>/dev/null || exit 0
+          if [ -n "$GSC_KEY" ]; then
+            printf '%s' "$GSC_KEY" > gsc_key.json
+            echo "  ○ 置きました"
+          else
+            echo "  ★GSC_KEY がありません"
+          fi
+
       - name: 鍵が生きているか確かめる
         # ★鍵そのものは出さない★ 公開リポなので記録は誰でも読める
         env:
