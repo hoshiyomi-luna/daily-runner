@@ -1,0 +1,114 @@
+# ══════════════════════════════════════════════════════════════════
+# run.yml — 非公開リポジトリのコードを、ここで動かすだけ
+# ══════════════════════════════════════════════════════════════════
+#
+# ■AIへ■ ★なぜこれが要るか★
+#   GitHub Actions は
+#     非公開リポジトリ 月2,000分（有限）
+#     ★公開リポジトリ 無制限（無料）★
+#   2026-09-08に非公開の枠を使い切り、全部の段取りが止まった。
+#   ★ここは実行するだけの入れ物★ コードは非公開のまま。
+#
+# ■★★★ 絶対に守ること ★★★
+#   ★公開リポジトリは、実行の記録も誰でも読める★
+#     鍵は自動で伏せられるが、画面に出た文字はそのまま読める。
+#   ★だから、出力は1文字も画面に出さない★
+#     すべて > log.txt に逃がす。
+#     エラーも 2>&1 で同じところへ。
+#   ★エラーのときも中身を出さない★
+#     「失敗しました」とだけ出す。理由は出さない。
+#   ★ログをartifactとして残さない★ 誰でも取れてしまう。
+#
+# ■隠す必要があるもの／ないもの
+#   隠す   Cloudflareの鍵 / GitHubのトークン / DMMのAPI ID /
+#          Blueskyのパスワード / はてなのAPIキー
+#          → すべてSecretsに入れる。GitHubが自動で伏せる。
+#   隠さなくてよい
+#          アフィリエイトID（サイトの全リンクに入っており既に公開）
+#          サイトの住所（公開しているのだから当然）
+name: manga-daily
+
+on:
+  schedule:
+    - cron: "0 17 * * *"      # 日本時間 深夜2:00
+  workflow_dispatch:
+
+concurrency:
+  group: manga-daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300   # 公開リポジトリは無制限なので長くてよい
+    steps:
+      # ★非公開リポジトリを取り出す★
+      #   ■AIへ■ PRIVATE_TOKEN は「読み取りだけ」の細かい権限にすること。
+      #     万一漏れても、書き換えられない。
+      - uses: actions/checkout@v4
+        with:
+          repository: hoshiyomi-luna/uranai-luna
+          token: ${{ secrets.SRC_TOKEN }}
+          path: work
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: 支度
+        run: |
+          pip install -q requests pillow cryptography > /dev/null 2>&1
+          npm i -g wrangler > /dev/null 2>&1 || true
+          echo "  支度しました"
+
+      - name: 鍵が生きているか確かめる
+        # ★鍵そのものは出さない★ 公開リポなので記録は誰でも読める
+        env:
+          DMM_API_ID: ${{ secrets.DMM_API_ID }}
+          DMM_AFFILIATE_ID: ${{ secrets.DMM_AFFILIATE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd work/scripts/manga
+          python3 key_check.py > key.log 2>&1 || true
+          # ★○×だけ出す★ 鍵の中身は出さない
+          grep -cE "^  ○" key.log | xargs -I{} echo "  生きている鍵 {} 件"
+          grep -cE "^  ★" key.log | xargs -I{} echo "  切れている鍵 {} 件"
+
+      # ★★★ ここから出力は1文字も出さない ★★★
+      - name: 更新
+        env:
+          MANGA_DATA_DIR: ${{ github.workspace }}/work/scripts/manga
+          DMM_API_ID: ${{ secrets.DMM_API_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd work/scripts/manga
+          # ★控えを戻す★
+          for f in ../../data/manga/*.json ../../data/manga/*.jsonl; do
+            cp -f "$f" . 2>/dev/null || true
+          done
+          for g in ../../data/manga/*.gz; do
+            case "$g" in *.tar.gz) tar xzf "$g" 2>/dev/null || true ;;
+              *) gunzip -c "$g" > "$(basename "${g%.gz}")" 2>/dev/null || true ;;
+            esac
+          done
+          # ★★★ 出力を全部ファイルへ逃がす ★★★
+          #   ■AIへ■ ここで画面に出すと、誰でも読める。
+          set +e
+          python3 auto_daily.py > run.log 2>&1
+          echo $? > run.code
+          set -e
+          echo "  更新しました"
+
+      - name: 結果
+        if: always()
+        run: |
+          cd work/scripts/manga 2>/dev/null || exit 0
+          c=$(cat run.code 2>/dev/null || echo 1)
+          if [ "$c" = "0" ]; then
+            echo "  ○ 成功しました"
+          else
+            # ★理由は出さない★ 中身が漏れる。
+            echo "  ★失敗しました（中身は出しません）"
+            exit 1
+          fi
