@@ -154,6 +154,13 @@ jobs:
           GH: ${{ secrets.SRC_TOKEN }}
         run: |
           cd work 2>/dev/null || exit 0
+          # ★ログを非公開リポへ残す★
+          #   ■AIへ■ 公開側に出せない理由を、ここで確かめられるように。
+          mkdir -p logs
+          for f in scripts/manga/run.log scripts/manga/duck.log \
+                   scripts/manga/key.log; do
+            [ -f "$f" ] && cp -f "$f" "logs/$(basename "$f")" || true
+          done
           git config user.name "runner"
           git config user.email "runner@local"
           git add -A > /dev/null 2>&1 || true
@@ -172,7 +179,13 @@ jobs:
           if [ "$c" = "0" ]; then
             echo "  ○ 成功しました"
           else
-            # ★理由は出さない★ 中身が漏れる。
-            echo "  ★失敗しました（中身は出しません）"
+            # ★★★ 理由は非公開リポにだけ残す ★★★
+            #   ■AIへ■ 画面に出すと誰でも読める。
+            #     でも理由が分からないと直せない。
+            #     ★ログを非公開リポへ持ち帰る★（記録を持ち帰る工程）
+            #     画面には「何行目で止まったか」だけ出す。
+            #     行番号だけなら、中身は分からない。
+            n=$(wc -l < run.log 2>/dev/null || echo 0)
+            echo "  ★失敗しました（ログ ${n} 行。中身は非公開リポへ）"
             exit 1
           fi
