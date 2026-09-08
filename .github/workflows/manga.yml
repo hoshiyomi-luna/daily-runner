@@ -108,6 +108,45 @@ jobs:
           set -e
           echo "  更新しました"
 
+      - name: アヒル動画を1本補充する
+        # ★★★ 予約が尽きないように毎日1本作る ★★★
+        #   ■AIへ■ ★前の工程が失敗しても必ず動く★
+        #     予約は毎日1本ずつ減る。数日止まると尽きる。
+        #     動画作りは在庫の更新と関係が無いので、独立して動かす。
+        #   ★出力はファイルへ★ 合言葉が漏れる。
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd work/scripts/manga 2>/dev/null || exit 0
+          timeout 1200 python3 daily_duck.py --n 1 > duck.log 2>&1 || true
+          if grep -q "作った動画 1 本" duck.log; then
+            echo "  ○ 1本作りました"
+          else
+            echo "  ★作れませんでした（中身は出しません）"
+          fi
+
+      - name: 記録を持ち帰る
+        # ★★★ 作ったものを非公開リポへ戻す ★★★
+        #   ■AIへ■ ★これが無いと、明日ゼロからやり直しになる★
+        #     公開リポは毎回まっさら。取り出した work/ は消える。
+        #   ★出力は出さない★ URLに鍵が入っている。
+        if: always()
+        env:
+          GH: ${{ secrets.SRC_TOKEN }}
+        run: |
+          cd work 2>/dev/null || exit 0
+          git config user.name "runner"
+          git config user.email "runner@local"
+          git add -A > /dev/null 2>&1 || true
+          git diff --cached --quiet || \
+            git commit -q -m "daily $(date -u +%F)" > /dev/null 2>&1 || true
+          git push -q \
+            "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" \
+            HEAD:main > /dev/null 2>&1 && echo "  ○ 持ち帰りました" \
+            || echo "  ★持ち帰れませんでした"
+
       - name: 結果
         if: always()
         run: |
