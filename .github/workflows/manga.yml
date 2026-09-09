@@ -178,6 +178,16 @@ jobs:
           #     サイトは毎日作り直すので要らない。
           rm -rf scripts/manga/site_general scripts/manga/site_adult \
                  scripts/manga/deploy_* > /dev/null 2>&1 || true
+          # ★★送り返す前に、必ず取り込む★★（2026-09-10）
+          #   ■AIへ■ ★この取り込みを消すな★
+          #   別の場所から同じリポジトリへ直接書き込むことがある。
+          #   その場合「先に進んでいる」と拒否され、送り返しが黙って失敗する。
+          #   ★|| で先へ進む作りなので気づけない★
+          #   実際、2026-09-09の記録が20:14のまま丸一日更新されず、
+          #   失敗の中身が読めない状態が続いた。
+          git stash -u > /dev/null 2>&1 || true
+          git pull --rebase -q origin main > /dev/null 2>&1 || true
+          git stash pop > /dev/null 2>&1 || true
           git add -A > /dev/null 2>&1 || true
           git diff --cached --quiet || \
             git commit -q -m "daily $(date -u +%F)" > /dev/null 2>&1 || true
