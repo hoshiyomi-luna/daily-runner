@@ -1,0 +1,89 @@
+# ══════════════════════════════════════════════════════════════════
+# duck-remake.yml — 保管庫のボタンから、動画だけを作り直す
+# ══════════════════════════════════════════════════════════════════
+#
+# ■AIへ■ ★なぜ公開リポジトリに置くか★
+#   非公開リポジトリは月2,000分しか使えない。
+#   2026-09-08に使い切り、★作り直しボタンが2秒で失敗する★状態になった。
+#   （工程が0件・ログ0バイト＝枠切れの症状）
+#   公開リポジトリは実行時間が無制限なので、ここなら必ず動く。
+#
+# ★出力は1文字も画面に出さない★
+#   公開リポジトリは実行の記録も誰でも読める。
+#   合言葉・動画の名前・作品名が漏れる。
+name: duck-remake
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [duck-remake]
+
+jobs:
+  remake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: hoshiyomi-luna/uranai-luna
+          token: ${{ secrets.SRC_TOKEN }}
+          path: work
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: 支度
+        run: |
+          pip install -q requests pillow cryptography > /dev/null 2>&1
+          npm i -g wrangler > /dev/null 2>&1 || true
+          sudo apt-get -qq install -y ffmpeg > /dev/null 2>&1 || true
+          echo "  支度しました"
+
+      - name: 作り直す
+        env:
+          MANGA_DATA_DIR: ${{ github.workspace }}/work/scripts/manga
+          DMM_API_ID: ${{ secrets.DMM_API_ID }}
+          DMM_AFFILIATE_ID: ${{ secrets.DMM_AFFILIATE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          cd work/scripts/manga
+          for g in ../../data/manga/*.tar.gz; do
+            tar xzf "$g" 2>/dev/null || true
+          done
+          for f in ../../data/manga/*.json; do
+            cp -f "$f" . 2>/dev/null || true
+          done
+          # ★★★ 出力は全部ファイルへ ★★★
+          #   ■AIへ■ 合言葉が漏れる。画面に出さない。
+          set +e
+          timeout 1800 python3 daily_duck.py --n 0 > remake.log 2>&1
+          echo $? > remake.code
+          set -e
+          if grep -q "作り直しました" remake.log; then
+            echo "  ○ 作り直しました"
+          else
+            echo "  ★作り直せませんでした（中身は出しません）"
+          fi
+
+      - name: 記録を持ち帰る
+        if: always()
+        env:
+          GH: ${{ secrets.SRC_TOKEN }}
+        run: |
+          cd work 2>/dev/null || exit 0
+          mkdir -p runlog
+          [ -f scripts/manga/remake.log ] && \
+            tail -c 100000 scripts/manga/remake.log > runlog/remake.txt || true
+          rm -rf scripts/manga/site_general scripts/manga/site_adult \
+                 scripts/manga/deploy_* > /dev/null 2>&1 || true
+          git config user.name "runner"
+          git config user.email "runner@local"
+          git add -A > /dev/null 2>&1 || true
+          git add -f runlog > /dev/null 2>&1 || true
+          git diff --cached --quiet || \
+            git commit -q -m "remake $(date -u +%F)" > /dev/null 2>&1 || true
+          git push -q \
+            "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" \
+            HEAD:main > /dev/null 2>&1 && echo "  ○ 持ち帰りました" \
+            || echo "  ★持ち帰れませんでした"
