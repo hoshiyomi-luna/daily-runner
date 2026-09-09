@@ -19,6 +19,13 @@
 #   これだと中で全部こけても画面には success と出る。
 #   ★確かめようのない作りになっていた★
 #   → 中身はファイルへ、終了コードだけ bsky.code に残す。
+#
+# ★★時間切れ(124)を異常扱いするな★★（2026-09-09に直した）
+#   いいねは1件40〜86秒待つ。600秒では終わらないので必ず時間切れになる。
+#   元の設定に「|| true」が付いていたのは、これを承知の上だった。
+#   ★それを「失敗を隠している」と誤解して外し、後続を全部止めた★
+#   → 124だけ正常扱いにする。他の異常は残す。
+# ★1つ失敗しても後続を止めない★ if: always() を全段階に付ける。
 #     画面には「post=0 like=0」のような数字だけを出す。
 #     0 なら正常。0 以外なら、その段階が失敗している。
 # ============================================================
@@ -73,16 +80,19 @@ jobs:
         run: curl -s --max-time 300 "https://imadake-duck.pages.dev/api/run" > /dev/null 2>&1 || true
 
       - name: 投稿
+        if: always()
         run: |
           cd work/scripts/manga
           python3 bluesky.py --auto >> bsky.log 2>&1; echo "post=$?" >> bsky.code
 
       - name: はてなブログに1本出す
+        if: always()
         run: |
           cd work/scripts/manga
           timeout 180 python3 hatena_post.py --run >> bsky.log 2>&1; echo "hatena=$?" >> bsky.code
 
       - name: 何巻まで無料の記事
+        if: always()
         run: |
           cd work/scripts/manga
           if [ ! -f .series_$(TZ=Asia/Tokyo date +%F) ]; then
@@ -91,21 +101,33 @@ jobs:
           fi
 
       - name: 返信
+        if: always()
         run: |
           cd work/scripts/manga
-          timeout 600 python3 bsky_reply.py --run >> bsky.log 2>&1; echo "reply=$?" >> bsky.code
+          timeout 600 python3 bsky_reply.py --run >> bsky.log 2>&1; c=$?
+          [ $c -eq 124 ] && c=0
+          echo "reply=$c" >> bsky.code
 
       - name: いいね回り
+        if: always()
         run: |
           cd work/scripts/manga
-          timeout 600 python3 bsky_follow.py --like >> bsky.log 2>&1; echo "like=$?" >> bsky.code
+          timeout 600 python3 bsky_follow.py --like >> bsky.log 2>&1; c=$?
+          # ★124は時間切れ★ いいねは1件40〜86秒待つので600秒では終わらない。
+          #   途中まで進んでいれば正常。異常扱いにしない。
+          [ $c -eq 124 ] && c=0
+          echo "like=$c" >> bsky.code
 
       - name: フォロー
+        if: always()
         run: |
           cd work/scripts/manga
-          timeout 300 python3 bsky_follow.py --run >> bsky.log 2>&1; echo "follow=$?" >> bsky.code
+          timeout 300 python3 bsky_follow.py --run >> bsky.log 2>&1; c=$?
+          [ $c -eq 124 ] && c=0
+          echo "follow=$c" >> bsky.code
 
       - name: 言葉ごとのフォロバ率
+        if: always()
         run: |
           cd work/scripts/manga
           if [ ! -f .score_$(TZ=Asia/Tokyo date +%F) ]; then
@@ -114,9 +136,12 @@ jobs:
           fi
 
       - name: 返ってこない人を外す
+        if: always()
         run: |
           cd work/scripts/manga
-          timeout 300 python3 bsky_follow.py --cleanup >> bsky.log 2>&1; echo "cleanup=$?" >> bsky.code
+          timeout 300 python3 bsky_follow.py --cleanup >> bsky.log 2>&1; c=$?
+          [ $c -eq 124 ] && c=0
+          echo "cleanup=$c" >> bsky.code
 
       - name: 成否をまとめる
         if: always()
