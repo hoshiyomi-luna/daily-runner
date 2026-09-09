@@ -1,0 +1,125 @@
+# ============================================================
+# 今だけ無料マンガ の Bluesky ほか（30分ごと）
+#
+# ★なぜここ（公開リポジトリ）にあるか★
+#   非公開リポジトリは月2,000分しか使えず、2026-09-08に使い切った。
+#   公開リポジトリは標準の実行環境なら無制限で無料。
+#   ★コードは非公開のまま★ ここには何も置かない。取り出して動かすだけ。
+#
+# ★元は uranai-luna の .github/workflows/bsky.yml★
+#   移行のときにこれだけ漏れていて、Blueskyが止まっていた（2026-09-09に発見）。
+#   中身は元と同じ。checkout の仕方と、出力を隠す点だけが違う。
+#
+# ★公開リポジトリは実行の記録も誰でも読める★
+#   投稿の中身・件数・IDが見えると困るので、全部 /dev/null に捨てる。
+#   記録は非公開リポジトリ側へ git で持ち帰る。
+# ============================================================
+name: manga-bsky
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+concurrency:
+  group: manga-bsky
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: hoshiyomi-luna/uranai-luna
+          token: ${{ secrets.SRC_TOKEN }}
+          path: work
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: したく
+        run: pip install -q requests pillow cryptography > /dev/null 2>&1 || true
+
+      - name: データを戻す
+        run: |
+          cd work/scripts/manga
+          for f in sns_posted.json follow_state.json reply_state.json \
+                   bsky_posted.json bsky_session.json bsky_hours.json \
+                   hatena_posted.json hatena_series_done.json \
+                   hatena_seo.json gsc_key.json like_score.json \
+                   items_general.json; do
+            cp -f ../../data/manga/$f . 2>/dev/null || true
+          done
+          if [ -f ../../data/manga/browser_general.tar.gz ]; then
+            tar xzf ../../data/manga/browser_general.tar.gz
+          fi
+
+      - name: 反応の多い時間を測り直す（月に1回・1日の朝）
+        if: ${{ github.event_name == 'schedule' }}
+        run: |
+          cd work/scripts/manga
+          if [ "$(TZ=Asia/Tokyo date +%d)" = "01" ] && [ "$(TZ=Asia/Tokyo date +%H)" = "05" ]; then
+            timeout 300 python3 bsky_hours.py --apply > /dev/null 2>&1 || true
+          fi
+
+      - name: アヒル動画の自動投稿
+        run: curl -s --max-time 300 "https://imadake-duck.pages.dev/api/run" > /dev/null 2>&1 || true
+
+      - name: 投稿
+        run: cd work/scripts/manga && python3 bluesky.py --auto > /dev/null 2>&1 || true
+
+      - name: はてなブログに1本出す
+        run: cd work/scripts/manga && timeout 180 python3 hatena_post.py --run > /dev/null 2>&1 || true
+
+      - name: 何巻まで無料の記事
+        run: |
+          cd work/scripts/manga
+          if [ ! -f .series_$(TZ=Asia/Tokyo date +%F) ]; then
+            timeout 180 python3 hatena_series.py --run > /dev/null 2>&1 && \
+              touch .series_$(TZ=Asia/Tokyo date +%F) || true
+          fi
+
+      - name: 返信
+        run: cd work/scripts/manga && timeout 600 python3 bsky_reply.py --run > /dev/null 2>&1 || true
+
+      - name: いいね回り
+        run: cd work/scripts/manga && timeout 600 python3 bsky_follow.py --like > /dev/null 2>&1 || true
+
+      - name: フォロー
+        run: cd work/scripts/manga && timeout 300 python3 bsky_follow.py --run > /dev/null 2>&1 || true
+
+      - name: 言葉ごとのフォロバ率
+        run: |
+          cd work/scripts/manga
+          if [ ! -f .score_$(TZ=Asia/Tokyo date +%F) ]; then
+            timeout 300 python3 bsky_follow.py --score > /dev/null 2>&1 && \
+              touch .score_$(TZ=Asia/Tokyo date +%F) || true
+          fi
+
+      - name: 返ってこない人を外す
+        run: cd work/scripts/manga && timeout 300 python3 bsky_follow.py --cleanup > /dev/null 2>&1 || true
+
+      - name: 記録を持ち帰る
+        if: always()
+        env:
+          GH: ${{ secrets.SRC_TOKEN }}
+        run: |
+          cd work/scripts/manga
+          for f in sns_posted.json follow_state.json reply_state.json \
+                   bsky_posted.json bsky_session.json bsky_hours.json \
+                   hatena_posted.json hatena_series_done.json \
+                   hatena_seo.json like_score.json; do
+            cp -f $f ../../data/manga/ 2>/dev/null || true
+          done
+          cd ..
+          cd ..
+          git config user.name "duck"
+          git config user.email "duck@imadake.local"
+          mkdir -p /tmp/keep
+          cp -f data/manga/*.json /tmp/keep/ > /dev/null 2>&1 || true
+          git checkout -- . > /dev/null 2>&1 || true
+          git pull --rebase -q origin main > /dev/null 2>&1 || true
+          cp -f /tmp/keep/*.json data/manga/ > /dev/null 2>&1 || true
+          git add data/manga/ > /dev/null 2>&1 || true
+          git diff --cached --quiet || git commit -q -m "bsky: $(date +%F_%H%M)" > /dev/null 2>&1 || true
+          git push -q "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" HEAD:main > /dev/null 2>&1 \
+            && echo "ok" || echo "check"
