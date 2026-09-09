@@ -20,6 +20,13 @@
 #   ★確かめようのない作りになっていた★
 #   → 中身はファイルへ、終了コードだけ bsky.code に残す。
 #
+# ★★set +e を必ず書く★★（2026-09-09に判明）
+#   GitHubの run: は既定で「bash -e」で動く。
+#   コマンドが0以外を返した瞬間、その段階が終わる。
+#   そのせいで「124なら0にする」処理が一度も実行されず、
+#   bsky.code に like= と follow= が記録されなかった。
+#   ★手前で打ち切られていた★
+#
 # ★★時間切れ(124)を異常扱いするな★★（2026-09-09に直した）
 #   いいねは1件40〜86秒待つ。600秒では終わらないので必ず時間切れになる。
 #   元の設定に「|| true」が付いていたのは、これを承知の上だった。
@@ -56,6 +63,7 @@ jobs:
 
       - name: データを戻す
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           for f in sns_posted.json follow_state.json reply_state.json \
                    bsky_posted.json bsky_session.json bsky_hours.json \
@@ -71,6 +79,7 @@ jobs:
       - name: 反応の多い時間を測り直す（月に1回・1日の朝）
         if: ${{ github.event_name == 'schedule' }}
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           if [ "$(TZ=Asia/Tokyo date +%d)" = "01" ] && [ "$(TZ=Asia/Tokyo date +%H)" = "05" ]; then
             timeout 300 python3 bsky_hours.py --apply > /dev/null 2>&1 || true
@@ -82,18 +91,21 @@ jobs:
       - name: 投稿
         if: always()
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           python3 bluesky.py --auto >> bsky.log 2>&1; echo "post=$?" >> bsky.code
 
       - name: はてなブログに1本出す
         if: always()
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           timeout 180 python3 hatena_post.py --run >> bsky.log 2>&1; echo "hatena=$?" >> bsky.code
 
       - name: 何巻まで無料の記事
         if: always()
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           if [ ! -f .series_$(TZ=Asia/Tokyo date +%F) ]; then
             timeout 180 python3 hatena_series.py --run > /dev/null 2>&1 && \
@@ -103,6 +115,7 @@ jobs:
       - name: 返信
         if: always()
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           timeout 600 python3 bsky_reply.py --run >> bsky.log 2>&1; c=$?
           [ $c -eq 124 ] && c=0
@@ -111,6 +124,7 @@ jobs:
       - name: いいね回り
         if: always()
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           timeout 600 python3 bsky_follow.py --like >> bsky.log 2>&1; c=$?
           # ★124は時間切れ★ いいねは1件40〜86秒待つので600秒では終わらない。
@@ -121,6 +135,7 @@ jobs:
       - name: フォロー
         if: always()
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           timeout 300 python3 bsky_follow.py --run >> bsky.log 2>&1; c=$?
           [ $c -eq 124 ] && c=0
@@ -129,6 +144,7 @@ jobs:
       - name: 言葉ごとのフォロバ率
         if: always()
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           if [ ! -f .score_$(TZ=Asia/Tokyo date +%F) ]; then
             timeout 300 python3 bsky_follow.py --score > /dev/null 2>&1 && \
@@ -138,6 +154,7 @@ jobs:
       - name: 返ってこない人を外す
         if: always()
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           timeout 300 python3 bsky_follow.py --cleanup >> bsky.log 2>&1; c=$?
           [ $c -eq 124 ] && c=0
@@ -146,6 +163,7 @@ jobs:
       - name: 成否をまとめる
         if: always()
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           # ★中身は出さない。終了コードだけ★
           tr '\n' ' ' < bsky.code 2>/dev/null || echo "code-none"
@@ -156,6 +174,7 @@ jobs:
         env:
           GH: ${{ secrets.SRC_TOKEN }}
         run: |
+          set +e   # ★これが無いと0以外を返した時点で段階が終わる★
           cd work/scripts/manga
           for f in sns_posted.json follow_state.json reply_state.json \
                    bsky_posted.json bsky_session.json bsky_hours.json \
