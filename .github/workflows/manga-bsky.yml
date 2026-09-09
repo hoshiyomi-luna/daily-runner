@@ -11,8 +11,16 @@
 #   中身は元と同じ。checkout の仕方と、出力を隠す点だけが違う。
 #
 # ★公開リポジトリは実行の記録も誰でも読める★
-#   投稿の中身・件数・IDが見えると困るので、全部 /dev/null に捨てる。
+#   投稿の中身・件数・IDが見えると困るので、中身はファイルへ逃がす。
 #   記録は非公開リポジトリ側へ git で持ち帰る。
+#
+# ★★中身を隠すのと、失敗を隠すのは別★★（2026-09-09に直した）
+#   最初は「> /dev/null 2>&1 || true」と書いた。
+#   これだと中で全部こけても画面には success と出る。
+#   ★確かめようのない作りになっていた★
+#   → 中身はファイルへ、終了コードだけ bsky.code に残す。
+#     画面には「post=0 like=0」のような数字だけを出す。
+#     0 なら正常。0 以外なら、その段階が失敗している。
 # ============================================================
 name: manga-bsky
 on:
@@ -65,10 +73,14 @@ jobs:
         run: curl -s --max-time 300 "https://imadake-duck.pages.dev/api/run" > /dev/null 2>&1 || true
 
       - name: 投稿
-        run: cd work/scripts/manga && python3 bluesky.py --auto > /dev/null 2>&1 || true
+        run: |
+          cd work/scripts/manga
+          python3 bluesky.py --auto >> bsky.log 2>&1; echo "post=$?" >> bsky.code
 
       - name: はてなブログに1本出す
-        run: cd work/scripts/manga && timeout 180 python3 hatena_post.py --run > /dev/null 2>&1 || true
+        run: |
+          cd work/scripts/manga
+          timeout 180 python3 hatena_post.py --run >> bsky.log 2>&1; echo "hatena=$?" >> bsky.code
 
       - name: 何巻まで無料の記事
         run: |
@@ -79,13 +91,19 @@ jobs:
           fi
 
       - name: 返信
-        run: cd work/scripts/manga && timeout 600 python3 bsky_reply.py --run > /dev/null 2>&1 || true
+        run: |
+          cd work/scripts/manga
+          timeout 600 python3 bsky_reply.py --run >> bsky.log 2>&1; echo "reply=$?" >> bsky.code
 
       - name: いいね回り
-        run: cd work/scripts/manga && timeout 600 python3 bsky_follow.py --like > /dev/null 2>&1 || true
+        run: |
+          cd work/scripts/manga
+          timeout 600 python3 bsky_follow.py --like >> bsky.log 2>&1; echo "like=$?" >> bsky.code
 
       - name: フォロー
-        run: cd work/scripts/manga && timeout 300 python3 bsky_follow.py --run > /dev/null 2>&1 || true
+        run: |
+          cd work/scripts/manga
+          timeout 300 python3 bsky_follow.py --run >> bsky.log 2>&1; echo "follow=$?" >> bsky.code
 
       - name: 言葉ごとのフォロバ率
         run: |
@@ -96,7 +114,17 @@ jobs:
           fi
 
       - name: 返ってこない人を外す
-        run: cd work/scripts/manga && timeout 300 python3 bsky_follow.py --cleanup > /dev/null 2>&1 || true
+        run: |
+          cd work/scripts/manga
+          timeout 300 python3 bsky_follow.py --cleanup >> bsky.log 2>&1; echo "cleanup=$?" >> bsky.code
+
+      - name: 成否をまとめる
+        if: always()
+        run: |
+          cd work/scripts/manga
+          # ★中身は出さない。終了コードだけ★
+          tr '\n' ' ' < bsky.code 2>/dev/null || echo "code-none"
+          if grep -qv '=0$' bsky.code 2>/dev/null; then echo "ng"; else echo "ok"; fi
 
       - name: 記録を持ち帰る
         if: always()
@@ -110,6 +138,10 @@ jobs:
                    hatena_seo.json like_score.json; do
             cp -f $f ../../data/manga/ 2>/dev/null || true
           done
+          # ★失敗の中身は非公開側の記録へ★ 公開側には出さない
+          mkdir -p ../../runlog
+          tail -c 60000 bsky.log > ../../runlog/bsky.txt 2>/dev/null || true
+          cp -f bsky.code ../../runlog/bsky.code 2>/dev/null || true
           cd ..
           cd ..
           git config user.name "duck"
@@ -119,7 +151,7 @@ jobs:
           git checkout -- . > /dev/null 2>&1 || true
           git pull --rebase -q origin main > /dev/null 2>&1 || true
           cp -f /tmp/keep/*.json data/manga/ > /dev/null 2>&1 || true
-          git add data/manga/ > /dev/null 2>&1 || true
+          git add data/manga/ runlog/ > /dev/null 2>&1 || true
           git diff --cached --quiet || git commit -q -m "bsky: $(date +%F_%H%M)" > /dev/null 2>&1 || true
           git push -q "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" HEAD:main > /dev/null 2>&1 \
             && echo "ok" || echo "check"
