@@ -1,0 +1,70 @@
+# ============================================================
+# ライブチャットのお知らせをBlueskyへ出す（1日3回）
+#
+# ★なぜ公開リポジトリにあるか★
+#   非公開は月2,000分を使い切っている。公開は無制限。
+#   ★中身は非公開リポジトリから取り出す★ここには何も置かない。
+#
+# ★なぜGitHubで動かすか★
+#   投稿の直前にスクショを撮る。ブラウザが要るのでWorkerでは無理。
+#
+# ★呼ばれる頻度★
+#   ゆあのWorkerが30分ごとに叩く。GitHubの定期実行は当てにならない
+#   （実測: */30 と書いても7時間半で1回しか動かなかった）。
+#   出す枠（12時・18時・22時）は live_post.py 側が見ている。
+#
+# ★出力を隠す★ 公開リポジトリは実行の記録も誰でも読めるため。
+# ============================================================
+name: live-post
+on:
+  workflow_dispatch:
+concurrency:
+  group: live-post
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: hoshiyomi-luna/shirouto-douga
+          token: ${{ secrets.SRC_TOKEN }}
+          path: src
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: したく
+        run: |
+          set +e
+          pip install -q requests pillow playwright > /dev/null 2>&1
+          python3 -m playwright install chromium > /dev/null 2>&1
+          echo ok
+      - name: 出す
+        env:
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_APP_PW: ${{ secrets.BLUESKY_APP_PW }}
+        run: |
+          set +e
+          cd src
+          python3 live_post.py --post > live.log 2>&1
+          echo "code=$?"
+      - name: 記録を持ち帰る
+        if: always()
+        env:
+          GH: ${{ secrets.SRC_TOKEN }}
+        run: |
+          set +e
+          cd src
+          git config user.name "runner"
+          git config user.email "runner@local"
+          git stash -u > /dev/null 2>&1
+          git pull --rebase -q origin main > /dev/null 2>&1
+          git stash pop > /dev/null 2>&1
+          mkdir -p logs
+          cp -f live.log logs/live.txt > /dev/null 2>&1
+          git add live_post_state.json logs/live.txt > /dev/null 2>&1
+          git diff --cached --quiet || git commit -q -m "live $(date -u +%F_%H%M)" > /dev/null 2>&1
+          git push -q "https://x-access-token:${GH}@github.com/hoshiyomi-luna/shirouto-douga.git" HEAD:main > /dev/null 2>&1 \
+            && echo "ok" || echo "check"
