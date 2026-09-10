@@ -1,19 +1,20 @@
 # ============================================================
-# ライブチャットのお知らせをBlueskyへ出す（1日3回）
+# ライブチャットのお知らせをBlueskyへ出す（30分ごとに見回る）
 #
 # ★なぜ公開リポジトリにあるか★
-#   非公開は月2,000分を使い切っている。公開は無制限。
-#   ★中身は非公開リポジトリから取り出す★ここには何も置かない。
+#   非公開リポジトリの実行時間は月2,000分で、既に使い切っている。
+#   公開リポジトリは標準の実行環境なら無制限で無料。
+#   ★コードは非公開のまま★ ここには何も置かない。
 #
 # ★なぜGitHubで動かすか★
-#   投稿の直前にスクショを撮る。ブラウザが要るのでWorkerでは無理。
+#   投稿の直前にサイトの画面を撮る。ブラウザが要るのでWorkerでは動かない。
 #
-# ★呼ばれる頻度★
-#   ゆあのWorkerが30分ごとに叩く。GitHubの定期実行は当てにならない
-#   （実測: */30 と書いても7時間半で1回しか動かなかった）。
-#   出す枠（12時・18時・22時）は live_post.py 側が見ている。
+# ★起動はWorkerから★
+#   GitHubの定期実行は当てにならない（実測: 7時間半で1回）。
+#   shirouto-proxy（Cloudflare）が30分ごとに叩く。
 #
-# ★出力を隠す★ 公開リポジトリは実行の記録も誰でも読めるため。
+# ★出力は隠す★ 公開リポジトリは実行の記録も誰でも読める。
+#   ただし成否だけは残す（隠しすぎて失敗に気づけなかった反省）。
 # ============================================================
 name: live-post
 on:
@@ -25,7 +26,7 @@ concurrency:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,35 +37,38 @@ jobs:
         with:
           python-version: "3.12"
       - name: したく
+        working-directory: src
         run: |
           set +e
           pip install -q requests pillow playwright > /dev/null 2>&1
           python3 -m playwright install chromium > /dev/null 2>&1
-          echo ok
-      - name: 出す
+          echo "ok"
+
+      - name: お知らせを出す
+        working-directory: src
         env:
           BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
           BLUESKY_APP_PW: ${{ secrets.BLUESKY_APP_PW }}
         run: |
           set +e
-          cd src
-          python3 live_post.py --post > live.log 2>&1
-          echo "code=$?"
+          python3 live_post.py --post >> live.log 2>&1
+          echo "live=$?"
+
       - name: 記録を持ち帰る
         if: always()
+        working-directory: src
         env:
           GH: ${{ secrets.SRC_TOKEN }}
         run: |
           set +e
-          cd src
+          mkdir -p logs
+          tail -c 30000 live.log > logs/live.txt 2>/dev/null
           git config user.name "runner"
           git config user.email "runner@local"
           git stash -u > /dev/null 2>&1
           git pull --rebase -q origin main > /dev/null 2>&1
           git stash pop > /dev/null 2>&1
-          mkdir -p logs
-          cp -f live.log logs/live.txt > /dev/null 2>&1
-          git add live_post_state.json logs/live.txt > /dev/null 2>&1
+          git add logs/live.txt live_post_state.json > /dev/null 2>&1
           git diff --cached --quiet || git commit -q -m "live $(date -u +%F_%H%M)" > /dev/null 2>&1
-          git push -q "https://x-access-token:${GH}@github.com/hoshiyomi-luna/shirouto-douga.git" HEAD:main > /dev/null 2>&1 \
-            && echo "ok" || echo "check"
+          git push -q "https://x-access-token:${GH}@github.com/hoshiyomi-luna/shirouto-douga.git" HEAD:main > /dev/null 2>&1
+          echo "done"
