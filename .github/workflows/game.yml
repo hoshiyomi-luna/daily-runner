@@ -1,0 +1,99 @@
+# ============================================================
+# エロゲームまとめ の毎日の更新
+#
+# ★マンガと同じ形★ 集める→在庫→レビュー→値下がり→組み立て→配信
+#   中身は game_daily.py が1本で通す。
+#   ★手で1段ずつ動かすな★ 流れが切れると各段が古いものを見る。
+#
+# ★なぜ公開リポジトリか★
+#   非公開リポジトリの実行時間は月2,000分で使い切っている。
+#   公開リポジトリは標準の実行環境なら無制限で無料。
+#   コードは非公開のまま。ここには置かない。
+#
+# ★出力は隠す★ 公開リポジトリは実行の記録も誰でも読める。
+#   ただし段階の名前と成否だけは残す（隠しすぎて失敗に気づけなかった反省）。
+# ============================================================
+name: game-daily
+on:
+  schedule:
+    - cron: "30 19 * * *"
+  workflow_dispatch:
+concurrency:
+  group: game-daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: hoshiyomi-luna/uranai-luna
+          token: ${{ secrets.SRC_TOKEN }}
+          path: src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: したく
+        working-directory: src/scripts/game
+        run: |
+          set +e
+          pip install -q requests pillow > /dev/null 2>&1
+          npm install -g wrangler > /dev/null 2>&1
+          echo "ok"
+
+      - name: 送る前の点検
+        working-directory: src/scripts/game
+        run: |
+          set +e
+          python3 - <<'PYEOF'
+          import ast, glob, sys
+          ng = 0
+          for f in sorted(glob.glob("*.py")):
+              try:
+                  ast.parse(open(f, encoding="utf-8", errors="replace").read())
+              except SyntaxError as e:
+                  print(f"NG {f}:{e.lineno}")
+                  ng += 1
+          print("syntax=%d" % ng)
+          PYEOF
+
+      - name: 毎日の更新
+        working-directory: src/scripts/game
+        env:
+          DMM_API_ID: ${{ secrets.DMM_API_ID }}
+          DMM_AFFILIATE_ID: ${{ secrets.DMM_AFFILIATE_ID }}
+          DMM_AFFILIATE_ID_PUB: ${{ secrets.GAME_AF_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set +e
+          python3 game_daily.py > run.log 2>&1
+          echo "code=$?"
+          # ★段階の名前だけ出す★ 件数や作品名は伏せる
+          grep -E '^\[[0-9:]+\] [0-9]/5 |^\[[0-9:]+\] 完了|★' run.log | \
+            sed -E 's/[0-9]{3,}/…/g' | tail -20
+
+      - name: 記録を持ち帰る
+        if: always()
+        working-directory: src
+        env:
+          GH: ${{ secrets.SRC_TOKEN }}
+        run: |
+          set +e
+          mkdir -p runlog
+          tail -c 60000 scripts/game/run.log > runlog/game.txt 2>/dev/null
+          rm -rf scripts/game/game_deploy scripts/game/game_site \
+                 scripts/game/game_browser 2>/dev/null
+          git config user.name "runner"
+          git config user.email "runner@local"
+          git stash -u > /dev/null 2>&1
+          git pull --rebase -q origin main > /dev/null 2>&1
+          git stash pop > /dev/null 2>&1
+          git add -A > /dev/null 2>&1
+          git diff --cached --quiet || git commit -q -m "game $(date -u +%F)" > /dev/null 2>&1
+          git push -q "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" HEAD:main > /dev/null 2>&1
+          echo "done"
