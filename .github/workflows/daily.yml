@@ -39,6 +39,16 @@ jobs:
           pip install -q requests pillow cryptography pynacl playwright > /dev/null 2>&1 || true
           python3 -m playwright install chromium > /dev/null 2>&1 || true
 
+      # ★Search Console の鍵を置く★（2026-09-11）
+      #   index_track.py（登録状況の記録）が gsc_key.json を探して毎日落ちていた。
+      #   秘密 GSC_KEY（manga.yml と同じもの）から書き出す。中身は出さない。
+      - name: GSCの鍵を置く
+        working-directory: src
+        env:
+          GSC_KEY: ${{ secrets.GSC_KEY }}
+        run: |
+          if [ -n "$GSC_KEY" ]; then printf '%s' "$GSC_KEY" > gsc_key.json; fi
+
       - name: run
         working-directory: src
         env:
