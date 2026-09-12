@@ -100,6 +100,55 @@ jobs:
           grep -cE "^  ★" key.log | xargs -I{} echo "  切れている鍵 {} 件"
 
       # ★★★ ここから出力は1文字も出さない ★★★
+      # ★★動かす前に壊れていないか見る★★（2026-09-12）
+      #   ■AIへ■ ★この点検を消すな★
+      #     2026-09-12、字下げの崩れたファイルが送られ、
+      #     気づかないまま実行されるところだった。
+      #     文法が通らないファイルが1つでもあれば、その先は全部無駄になる。
+      #   ★定義されていない名前も見る★
+      #     HERE と HERE2 の取り違えで general 側が丸一日止まった。
+      - name: 壊れていないか見る
+        working-directory: src/scripts/manga
+        run: |
+          set +e
+          python3 - <<'PYEOF'
+          import ast, builtins, glob, sys
+          ng = 0
+          for f in sorted(glob.glob("*.py")):
+              src = open(f, encoding="utf-8", errors="replace").read()
+              try:
+                  tree = ast.parse(src)
+              except SyntaxError as e:
+                  print("NG %s:%s %s" % (f, e.lineno, e.msg)); ng += 1; continue
+              known = set(dir(builtins)) | {"__file__", "__name__", "__doc__"}
+              for n in ast.walk(tree):
+                  if isinstance(n, (ast.Import, ast.ImportFrom)):
+                      for al in n.names:
+                          known.add((al.asname or al.name).split(".")[0])
+                  elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                      known.add(n.name)
+                      if not isinstance(n, ast.ClassDef):
+                          ar = n.args
+                          for x in ar.posonlyargs + ar.args + ar.kwonlyargs: known.add(x.arg)
+                          if ar.vararg: known.add(ar.vararg.arg)
+                          if ar.kwarg: known.add(ar.kwarg.arg)
+                  elif isinstance(n, ast.Lambda):
+                      ar = n.args
+                      for x in ar.posonlyargs + ar.args + ar.kwonlyargs: known.add(x.arg)
+                  elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+                      known.add(n.id)
+                  elif isinstance(n, ast.ExceptHandler) and n.name: known.add(n.name)
+                  elif isinstance(n, (ast.Global, ast.Nonlocal)): known.update(n.names)
+                  elif isinstance(n, ast.comprehension):
+                      for t in ast.walk(n.target):
+                          if isinstance(t, ast.Name): known.add(t.id)
+              for n in ast.walk(tree):
+                  if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id not in known:
+                      print("NG %s:%s 定義されていない名前 %s" % (f, n.lineno, n.id)); ng += 1
+          print("check=%d" % ng)
+          if ng: sys.exit(1)
+          PYEOF
+
       - name: 更新
         env:
           MANGA_DATA_DIR: ${{ github.workspace }}/work/scripts/manga
