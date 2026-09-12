@@ -108,7 +108,11 @@ jobs:
       #   ★定義されていない名前も見る★
       #     HERE と HERE2 の取り違えで general 側が丸一日止まった。
       - name: 壊れていないか見る
-        working-directory: src/scripts/manga
+        # ★取り出し先は work★（2026-09-12）
+        #   ■AIへ■ src と書くな。checkout の path が work になっている。
+        #     間違えると「作業場所が無い」で点検そのものが動かず、
+        #     壊れたまま先へ進む。
+        working-directory: work/scripts/manga
         run: |
           set +e
           python3 - <<'PYEOF'
