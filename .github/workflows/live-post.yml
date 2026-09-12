@@ -54,6 +54,20 @@ jobs:
           python3 live_post.py --post >> live.log 2>&1
           echo "live=$?"
 
+      # ★巻き戻しの見張り★（2026-09-12）
+      #   古い会話の手元が「同期 ○○」で新しい修正を古い写しで上書きした。
+      #   30分ごとに見て、コードが巻き戻っていれば直前の版へ戻す。
+      #   （guard_src.py は非公開側。出力はファイル名だけ）
+      - name: 巻き戻しの見張り
+        if: always()
+        working-directory: src
+        env:
+          GH: ${{ secrets.SRC_TOKEN }}
+        run: |
+          set +e
+          python3 guard_src.py 2>&1 | tail -n 20
+          echo "guard=$?"
+
       - name: 記録を持ち帰る
         if: always()
         working-directory: src
