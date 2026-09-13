@@ -29,16 +29,11 @@
 name: manga-daily
 
 on:
-  schedule:
-    # ★★★ GitHubのcronは世界時(UTC)しか使えない ★★★
-    #   ■AIへ■ 日本時間では書けない。必ず9時間引くこと。
-    #     日本 01:00 → UTC 16:00  ← いまここ
-    #     日本 02:00 → UTC 17:00
-    #     日本 03:00 → UTC 18:00（素人動画・daily.yml）
-    #   ★書いてある数字と実際に動く時刻が違う★
-    #     これで日付が1日ずれる事故が起きた（2026-09-05）。
-    #   ★中のコードは jst_today() で日本時間に直している★
-    - cron: "0 16 * * *"
+  # ★時計は Cloudflare（duck-cron）★
+  #   ■AIへ■ GitHubの schedule は間引かれるので使わない（2026-09-13）。
+  #     Cloudflare の時計が 16:00 UTC（01:00 JST）に /api/kick/daily を呼び、
+  #     workflow_dispatch でここを起こす。
+  #   ★中のコードは jst_today() で日本時間に直している★
   workflow_dispatch:
 
 concurrency:
