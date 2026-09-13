@@ -151,6 +151,8 @@ jobs:
       - name: 更新
         env:
           MANGA_DATA_DIR: ${{ github.workspace }}/work/scripts/manga
+          # ★時計の門番（check_cron.py）が GitHub の schedule を確かめるのに要る★
+          SRC_TOKEN: ${{ secrets.SRC_TOKEN }}
           DMM_API_ID: ${{ secrets.DMM_API_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
