@@ -78,8 +78,17 @@ jobs:
           git config user.email "seo-bot@users.noreply.github.com"
           git add ops/history
           if git diff --cached --quiet; then
-            echo "変化なし"
-          else
-            git commit -q -m "measure: $(date -u +%Y-%m-%d) の実測を記録 [skip ci]"
-            git push -q "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" HEAD:main
+            echo "変化なし"; exit 0
           fi
+          git commit -q -m "measure: $(date -u +%Y-%m-%d) の実測を記録 [skip ci]"
+          # ★bot(duck)が15分おきにpushするので、必ず取り込んでから押す。5回まで粘る★
+          URL="https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git"
+          for i in 1 2 3 4 5; do
+            git fetch -q "$URL" main
+            if git rebase -q FETCH_HEAD && git push -q "$URL" HEAD:main; then
+              echo "push 成功（$i 回目）"; exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((i*10))
+          done
+          echo "★5回とも押せなかった"; exit 1
