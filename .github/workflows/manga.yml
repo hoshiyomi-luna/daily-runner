@@ -29,11 +29,16 @@
 name: manga-daily
 
 on:
-  # ★時計は Cloudflare（duck-cron）★
-  #   ■AIへ■ GitHubの schedule は間引かれるので使わない（2026-09-13）。
-  #     Cloudflare の時計が 16:00 UTC（01:00 JST）に /api/kick/daily を呼び、
-  #     workflow_dispatch でここを起こす。
-  #   ★中のコードは jst_today() で日本時間に直している★
+  schedule:
+    # ★★★ GitHubのcronは世界時(UTC)しか使えない ★★★
+    #   ■AIへ■ 日本時間では書けない。必ず9時間引くこと。
+    #     日本 01:00 → UTC 16:00  ← いまここ
+    #     日本 02:00 → UTC 17:00
+    #     日本 03:00 → UTC 18:00（素人動画・daily.yml）
+    #   ★書いてある数字と実際に動く時刻が違う★
+    #     これで日付が1日ずれる事故が起きた（2026-09-05）。
+    #   ★中のコードは jst_today() で日本時間に直している★
+    - cron: "0 16 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -151,8 +156,6 @@ jobs:
       - name: 更新
         env:
           MANGA_DATA_DIR: ${{ github.workspace }}/work/scripts/manga
-          # ★時計の門番（check_cron.py）が GitHub の schedule を確かめるのに要る★
-          SRC_TOKEN: ${{ secrets.SRC_TOKEN }}
           DMM_API_ID: ${{ secrets.DMM_API_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -212,6 +215,12 @@ jobs:
           #     毎晩変わってしまう。--cuts-only は並びを変えない。
           timeout 300 python3 stock_order.py --cuts-only 2>&1 | tail -1 || true
           timeout 1200 python3 daily_duck.py --n 1 > duck.log 2>&1 || true
+          # ★★★ 予約が抜けていたら埋める ★★★
+          #   ■AIへ■ 手で作った動画や、途中で止まった日の動画には
+          #     予約が付いていないことがある（2026-09-13に実際にあった）。
+          #     ★7日先まで1日1本になるよう、空いている日に足す★
+          #     すでにある予約には触らない。
+          timeout 300 python3 fix_sched.py --days 7 2>&1 | tail -3 || true
           if grep -q "作った動画 1 本" duck.log; then
             echo "  ○ 1本作りました"
           else
