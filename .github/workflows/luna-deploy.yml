@@ -1,0 +1,87 @@
+name: Deploy uranai-luna to Cloudflare Pages
+
+# ★このワークフローは公開リポ（daily-runner）で動かす★
+#   ■AIへ■ 非公開リポ uranai-luna の Actions は Free 2,000分/月 で、bot の大量push
+#     （15分おき）× 5分ビルドで1週間で使い切る。毎日更新するサイトに2,000分は足りない。
+#     公開リポの Actions は無制限なので、ビルドと配信はここで行う。
+#
+#   起動の経路（uranai-luna への push では直接起動できないので）
+#     Cloudflare の時計（duck-cron・30分ごと）→ imadake-duck.pages.dev/api/kick/deploy
+#       → uranai-luna の main が前回配信から進んでいて、かつサイト本体
+#         （src/ public/ astro.config.mjs package*.json）が変わっていれば
+#       → このワークフローを workflow_dispatch で起こす
+#     急ぐときは API から直接 dispatch（tools_inventory.py【8.5】のPAT）
+#
+#   必要な秘密（daily-runner に登録済み）
+#     SRC_TOKEN / CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "配信する uranai-luna のコミット（空なら main の先頭）"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: luna-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: hoshiyomi-luna/uranai-luna
+          token: ${{ secrets.SRC_TOKEN }}
+          ref: ${{ github.event.inputs.sha || 'main' }}
+          path: src
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: install
+        working-directory: src
+        run: npm ci --no-audit --no-fund
+
+      - name: build
+        working-directory: src
+        run: npm run build
+
+      - name: sanity check
+        working-directory: src
+        run: |
+          n=$(find dist -name '*.html' | wc -l)
+          echo "dist HTML: $n"
+          test "$n" -ge 100 || { echo "★HTMLが少なすぎる。配信しない"; exit 1; }
+          test -f dist/index.html || { echo "★トップが無い"; exit 1; }
+          test -f dist/sitemap-0.xml || { echo "★sitemapが無い"; exit 1; }
+
+      - name: deploy
+        working-directory: src
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler@latest pages deploy dist --project-name=uranai-luna --branch=main
+
+      - name: IndexNow (Bing/Yandex)
+        working-directory: src
+        run: |
+          URLS=$(grep -oE 'https://uranai-luna\.com/[^<]*' dist/sitemap-0.xml | head -50)
+          URL_JSON=$(echo "$URLS" | python3 -c "import sys,json; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))")
+          curl -sS -X POST "https://api.indexnow.org/indexnow" -H "Content-Type: application/json" \
+            -d '{"host":"uranai-luna.com","key":"4f4e1c84b0e03b06138c7212590f9439","keyLocation":"https://uranai-luna.com/4f4e1c84b0e03b06138c7212590f9439.txt","urlList":'"$URL_JSON"'}' | head -c 300 || true
+          echo
+
+      - name: verify live
+        run: |
+          sleep 20
+          code=$(curl -s -o /dev/null -w '%{http_code}' -L https://uranai-luna.com/)
+          echo "top: $code"
+          test "$code" = "200"
