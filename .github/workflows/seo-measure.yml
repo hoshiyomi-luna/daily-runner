@@ -1,0 +1,85 @@
+name: SEO daily measure (uranai-luna)
+
+# ★このワークフローは公開リポ（daily-runner）で動かす★
+#   ■AIへ■ 非公開リポ uranai-luna の GitHub Actions は Free の 2,000分/月 を
+#     bot(duck)の大量push（551回/13日 × 5分ビルド）で使い切り、9/7から全部止まった。
+#     公開リポの Actions は無制限なので、計測はここで動かす。
+#   起動は Cloudflare の時計（duck-cron → imadake-duck.pages.dev/api/kick/daily）
+#   が 22:00 UTC（07:00 JST）に workflow_dispatch で起こす。schedule は使わない。
+#
+# 必要な秘密（daily-runner の Settings > Secrets and variables > Actions）
+#   SRC_TOKEN         … 既にある。uranai-luna の checkout と push に使う
+#   LUNA_GSC_KEY_JSON … luna-gsc-bot のサービスアカウントJSON（sc-domain:uranai-luna.com の siteOwner）
+#   SERPER_API_KEY    … Serper.dev のキー（無ければ順位計測だけ飛ばす）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seo-measure-luna
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: hoshiyomi-luna/uranai-luna
+          token: ${{ secrets.SRC_TOKEN }}
+          path: src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: install
+        run: pip install --quiet google-auth requests cryptography
+
+      - name: write key
+        env:
+          LUNA_GSC_KEY_JSON: ${{ secrets.LUNA_GSC_KEY_JSON }}
+        run: |
+          if [ -n "$LUNA_GSC_KEY_JSON" ]; then
+            printf '%s' "$LUNA_GSC_KEY_JSON" > /tmp/gsc-key.json
+            chmod 600 /tmp/gsc-key.json
+          else
+            echo "LUNA_GSC_KEY_JSON が未登録。インデックス計測をとばす"
+          fi
+
+      - name: measure
+        working-directory: src
+        env:
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+        run: python3 ops/daily_measure.py
+
+      - name: winloss (Sunday only)
+        working-directory: src
+        env:
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+        run: |
+          # ★日曜だけ★ 本命キーワードの勝敗（Serper 152回/週。月650回で無料枠内）
+          if [ "$(date -u +%u)" = "7" ]; then
+            python3 ops/winloss.py
+          else
+            echo "日曜ではないので勝敗計測はとばす（$(date -u +%A)）"
+          fi
+
+      - name: push history to uranai-luna
+        working-directory: src
+        env:
+          GH: ${{ secrets.SRC_TOKEN }}
+        run: |
+          git config user.name  "seo-bot"
+          git config user.email "seo-bot@users.noreply.github.com"
+          git add ops/history
+          if git diff --cached --quiet; then
+            echo "変化なし"
+          else
+            git commit -q -m "measure: $(date -u +%Y-%m-%d) の実測を記録 [skip ci]"
+            git push -q "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" HEAD:main
+          fi
