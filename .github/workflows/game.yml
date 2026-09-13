@@ -15,8 +15,9 @@
 # ============================================================
 name: game-daily
 on:
-  schedule:
-    - cron: "30 19 * * *"
+  # ★時計は Cloudflare（duck-cron）★
+  #   ■AIへ■ GitHubの schedule は間引かれるので使わない。
+  #     Cloudflare の時計が /api/kick/daily を呼び、workflow_dispatch で起こす。
   workflow_dispatch:
 concurrency:
   group: game-daily
