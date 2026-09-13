@@ -38,8 +38,9 @@
 # ============================================================
 name: manga-bsky
 on:
-  schedule:
-    - cron: "*/30 * * * *"
+  # ★時計は Cloudflare（duck-cron）★
+  #   ■AIへ■ GitHubの schedule は間引かれるので使わない。
+  #     Cloudflare の時計が /api/kick/daily を呼び、workflow_dispatch で起こす。
   workflow_dispatch:
 concurrency:
   group: manga-bsky
