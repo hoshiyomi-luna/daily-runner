@@ -209,8 +209,11 @@ jobs:
           #     ★保管庫（imadake-duck.pages.dev）が材料の本物置き場★
           timeout 600 python3 duck_restore.py > restore.log 2>&1 || true
           tail -1 restore.log | sed -E 's/[0-9]{3,}/…/g'
-          # ★切り抜きも作り直す★ 写真が戻ってから作る。
-          timeout 300 python3 stock_order.py > /dev/null 2>&1 || true
+          # ★切り抜きだけ足す★ 写真が戻ってから作る。
+          #   ■AIへ■ ★stock_order.py を引数なしで呼んではいけない★
+          #     それは並びを一から作り直す。写真に紐づく作品・合言葉が
+          #     毎晩変わってしまう。--cuts-only は並びを変えない。
+          timeout 300 python3 stock_order.py --cuts-only 2>&1 | tail -1 || true
           timeout 1200 python3 daily_duck.py --n 1 > duck.log 2>&1 || true
           if grep -q "作った動画 1 本" duck.log; then
             echo "  ○ 1本作りました"
