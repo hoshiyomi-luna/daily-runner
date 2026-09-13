@@ -202,6 +202,15 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           cd work/scripts/manga 2>/dev/null || exit 0
+          # ★★★ 作る前に、本番の保管庫から動画と写真を取り戻す ★★★
+          #   ■AIへ■ 動画・写真は .gitignore なので、ここには元から無い。
+          #     取り戻さないと「写真が無く作れません」で毎晩1本も作れず、
+          #     保管庫の配信も「動画0本」で止まる（2026-09-13まで実際にそうだった）。
+          #     ★保管庫（imadake-duck.pages.dev）が材料の本物置き場★
+          timeout 600 python3 duck_restore.py > restore.log 2>&1 || true
+          tail -1 restore.log | sed -E 's/[0-9]{3,}/…/g'
+          # ★切り抜きも作り直す★ 写真が戻ってから作る。
+          timeout 300 python3 stock_order.py > /dev/null 2>&1 || true
           timeout 1200 python3 daily_duck.py --n 1 > duck.log 2>&1 || true
           if grep -q "作った動画 1 本" duck.log; then
             echo "  ○ 1本作りました"
