@@ -29,10 +29,16 @@
 name: manga-daily
 
 on:
-  # ★時計は Cloudflare（duck-cron → /api/kick/daily）★
-  #   ■AIへ■ GitHubの schedule は間引かれるので使わない（2026-09-13）。
-  #     16:00 UTC（01:00 JST）に Cloudflare がここを起こす。
-  #   ★戻すと check_cron.py が配信を止める★
+  schedule:
+    # ★★★ GitHubのcronは世界時(UTC)しか使えない ★★★
+    #   ■AIへ■ 日本時間では書けない。必ず9時間引くこと。
+    #     日本 01:00 → UTC 16:00  ← いまここ
+    #     日本 02:00 → UTC 17:00
+    #     日本 03:00 → UTC 18:00（素人動画・daily.yml）
+    #   ★書いてある数字と実際に動く時刻が違う★
+    #     これで日付が1日ずれる事故が起きた（2026-09-05）。
+    #   ★中のコードは jst_today() で日本時間に直している★
+    - cron: "0 16 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -246,32 +252,42 @@ jobs:
           git add -f runlog > /dev/null 2>&1 || true
           git config user.name "runner"
           git config user.email "runner@local"
-          # ★★★ 作ったサイトは持ち帰らない ★★★
-          #   ■AIへ■ site_general は821MBある。
-          #     記録に入れると .git が1.9GBに膨れ、
-          #     ★空き容量が尽きて更新が止まる★（2026-09-08）
-          #   ★戻すのは「次の日に要るもの」だけ★
-          #     在庫・途中の記録・秘密ページ・台帳。
-          #     サイトは毎日作り直すので要らない。
           rm -rf scripts/manga/site_general scripts/manga/site_adult \
                  scripts/manga/deploy_* > /dev/null 2>&1 || true
-          # ★★送り返す前に、必ず取り込む★★（2026-09-10）
-          #   ■AIへ■ ★この取り込みを消すな★
-          #   別の場所から同じリポジトリへ直接書き込むことがある。
-          #   その場合「先に進んでいる」と拒否され、送り返しが黙って失敗する。
-          #   ★|| で先へ進む作りなので気づけない★
-          #   実際、2026-09-09の記録が20:14のまま丸一日更新されず、
-          #   失敗の中身が読めない状態が続いた。
-          git stash -u > /dev/null 2>&1 || true
-          git pull --rebase -q origin main > /dev/null 2>&1 || true
-          git stash pop > /dev/null 2>&1 || true
-          git add -A > /dev/null 2>&1 || true
-          git diff --cached --quiet || \
-            git commit -q -m "daily $(date -u +%F)" > /dev/null 2>&1 || true
-          git push -q \
-            "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" \
-            HEAD:main > /dev/null 2>&1 && echo "  ○ 持ち帰りました" \
-            || echo "  ★持ち帰れませんでした"
+          # ★★★ 持ち帰りは黙って失敗させない ★★★
+          #   ■AIへ■ ★2026-09-13に見つけた最悪の不具合★
+          #     すべてを > /dev/null 2>&1 || true で隠していたため、
+          #     ★在庫の控えが9/8から5日間まったく保存されていなかった★。
+          #     GitHubは success と出るので誰も気づけない。
+          #     新着を毎日取っているのに、翌日には消えていた。
+          #     実測：DMMの新着795件のうち★758件が在庫に無い★。
+          #   ★出力を隠さない。失敗したら exit 1 で赤くする★
+          echo "── 持ち帰り ──"
+          _before=$(git rev-parse HEAD)
+          git stash -u || echo "（退避なし）"
+          git pull --rebase origin main || echo "★取り込みに失敗"
+          git stash pop || echo "（戻すものなし）"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "★中止★ 保存するものがありません（在庫が作られていない）"
+            exit 1
+          fi
+          git commit -q -m "daily $(date -u +%F)"
+          if git push "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" HEAD:main; then
+            echo "  ○ 持ち帰りました"
+          else
+            echo "★中止★ 持ち帰れませんでした（在庫が翌日に残りません）"
+            exit 1
+          fi
+          # ★★★ 在庫の控えが本当に新しくなったか確かめる ★★★
+          #   ■AIへ■ push が通っても、控えが古いままなら意味がない。
+          #     ★中身を見て確かめる★
+          _n=$(git log -1 --name-only --format= | grep -c "stock_full.jsonl.gz" || echo 0)
+          if [ "$_n" = "0" ]; then
+            echo "★中止★ 在庫の控えが保存されていません"
+            exit 1
+          fi
+          echo "  ○ 在庫の控えも保存しました"
 
       - name: 結果
         if: always()
