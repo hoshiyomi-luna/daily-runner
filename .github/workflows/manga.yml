@@ -63,10 +63,45 @@ jobs:
         with: { python-version: "3.12" }
 
       - name: 支度
+        # ★★★ 動画づくりの道具はここで入れる ★★★（2026-09-17）
+        #   ■AIへ■ GitHub の実行環境には ffmpeg が入っていない。
+        #     duck_tool.py は ffprobe/ffmpeg で動画を組み立てるので、無いと
+        #     「FileNotFoundError: 'ffprobe'」で★毎晩1本も作れない★
+        #     （2026-09-13〜16、4晩×10回、そうなっていた。失敗は || true で隠れ、
+        #       GitHub は success のままだった）。
+        #   ★入れ忘れは次の「道具がそろっているか」で赤く止まる★
         run: |
           pip install -q requests pillow cryptography > /dev/null 2>&1
+          sudo apt-get update -qq > /dev/null 2>&1 || true
+          sudo apt-get install -y -qq ffmpeg fonts-noto-cjk > /dev/null 2>&1 || true
           npm i -g wrangler > /dev/null 2>&1 || true
           echo "  支度しました"
+
+      - name: 道具がそろっているか
+        # ★★★ 無ければここで止める（|| true を付けない）★★★
+        #   ■AIへ■ コメントを読まなくても止まる仕組み。
+        #     道具が無いまま先へ進むと、失敗が写真のせいに数えられ、
+        #     良い写真まで3回で外れる。作る前に環境の不備で止める。
+        #   ★何が無いかだけ出す★ 鍵や中身は出さない。
+        run: |
+          ng=0
+          for t in ffmpeg ffprobe; do
+            if command -v "$t" > /dev/null 2>&1; then echo "  ○ $t"; else echo "  ★ $t がありません"; ng=1; fi
+          done
+          if python3 -c "import PIL, cryptography, requests" > /dev/null 2>&1; then
+            echo "  ○ python の部品"
+          else
+            echo "  ★ python の部品（pillow/cryptography/requests）がありません"; ng=1
+          fi
+          if [ -s work/scripts/manga/assets/font.ttc ] || fc-list 2>/dev/null | grep -qi "Noto Sans CJK"; then
+            echo "  ○ 日本語の文字"
+          else
+            echo "  ★ 日本語の文字（assets/font.ttc か Noto Sans CJK）がありません"; ng=1
+          fi
+          if [ "$ng" != "0" ]; then
+            echo "★中止★ 道具がそろっていません。「支度」を直してください。"
+            exit 1
+          fi
 
       - name: GSCの鍵を置く
         # ★★★ gsc_key.json は .gitignore に入っている ★★★
@@ -214,6 +249,9 @@ jobs:
           #     それは並びを一から作り直す。写真に紐づく作品・合言葉が
           #     毎晩変わってしまう。--cuts-only は並びを変えない。
           timeout 300 python3 stock_order.py --cuts-only 2>&1 | tail -1 || true
+          # ★daily_duck.py が最初に素材庫を点検（stock_order.repair）してから1本作る★
+          #   ■AIへ■ 使用済み・著作権アウト・同じ絵柄・切り抜けない行を外し、
+          #     合言葉の重複・使用済みを付け直す。順番と写真↔作品の組は変えない。
           timeout 1200 python3 daily_duck.py --n 1 > duck.log 2>&1 || true
           # ★★★ 予約が抜けていたら埋める ★★★
           #   ■AIへ■ 手で作った動画や、途中で止まった日の動画には
@@ -225,6 +263,13 @@ jobs:
             echo "  ○ 1本作りました"
           else
             echo "  ★作れませんでした（中身は出しません）"
+          fi
+          # ★★★ 環境の不備は隠さない ★★★（2026-09-17）
+          #   ■AIへ■ 道具・部品が無い失敗は、この工程を赤くする（|| true で飲まない）。
+          #     ただし記録の持ち帰りは if: always() なので、ログは非公開リポに残る。
+          if grep -qE "ffprobe|ffmpeg|cannot open resource|No module named|道具が無い" duck.log; then
+            echo "★中止★ 道具が無くて作れませんでした。「支度」を確かめてください。"
+            exit 1
           fi
 
       - name: 記録を持ち帰る
