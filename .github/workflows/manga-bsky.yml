@@ -52,7 +52,7 @@ jobs:
   #     どちらも毎30分にこの workflow を起こすので、9/15から毎回2回動いていた
   #     （順番待ちで連続実行、時々 cancelled）。shirouto-proxy の元コードは
   #     どのリポにも無く直せないので、受け口のここで弾く。
-  #   ★25分以内に自分以外の起動があれば dup=1★ 正しい次の起動は30分後なので通る。
+  #   ★同じ30分枠（:00〜:29／:30〜:59）に自分より前の起動があれば dup=1★
   #   ★この門は絶対に失敗させない★（失敗すると本体が飛ばされる）。取れなければ dup=0。
   check:
     runs-on: ubuntu-latest
@@ -79,11 +79,15 @@ jobs:
               print(0); raise SystemExit
           def _t(r):
               return datetime.datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+          def _slot(t):
+              return (t.hour * 60 + t.minute) // 30       # 30分の枠番号（:00〜:29 / :30〜:59）
           mine = next((r for r in runs if str(r.get("id")) == me), None)
           my_t = _t(mine) if mine else datetime.datetime.now(datetime.timezone.utc)
           my_id = int(me) if me.isdigit() else 0
-          # ★自分より前に起きた（同時刻なら番号が小さい）ものだけ見る★
+          # ★同じ30分枠で、自分より前に起きた（同時刻なら番号が小さい）ものだけ見る★
           #   後から起きた方を見ると、1回目も「2回目がある」と思って両方止まる（手元で実測）。
+          #   「25分以内」だと、途中で手で起こした回のせいで次の正しい回まで飛ぶ（本番で実測）。
+          #   枠番号で見れば :00 と :30 は別の枠、:00 と :00:47 は同じ枠。
           for r in runs:
               if str(r.get("id")) == me:
                   continue
@@ -91,7 +95,8 @@ jobs:
                   continue                       # cancelled/failure は数えない
               t = _t(r)
               earlier = t < my_t or (t == my_t and int(r.get("id", 0)) < my_id)
-              if earlier and (my_t - t).total_seconds() < 25 * 60:
+              same_slot = t.date() == my_t.date() and _slot(t) == _slot(my_t)
+              if earlier and same_slot:
                   print(1); raise SystemExit
           print(0)
           PY
