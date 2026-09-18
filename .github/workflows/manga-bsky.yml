@@ -133,8 +133,16 @@ jobs:
                    items_general.json; do
             cp -f ../../data/manga/$f . 2>/dev/null || true
           done
-          if [ -f ../../data/manga/browser_general.tar.gz ]; then
+          # ★★★ 古い控えで新しいデータを上書きしない ★★★（2026-09-19）
+          #   ■AIへ■ scripts/manga/browser_general/ は毎晩の更新で commit され新しい
+          #     （sale.json の date は今日）。data/manga/browser_general.tar.gz は
+          #     9/4 で止まった控え（中身は 9/2）。前は無条件に tar を展開して
+          #     新しい値下げ一覧を 9/2 のもので潰していた。だから Bluesky は
+          #     2週間前の値下げを出し、同じ作品を何度も出した。
+          #   ★checkout に sale.json が無いときだけ、控えから展開する★
+          if [ ! -s browser_general/sale.json ] && [ -f ../../data/manga/browser_general.tar.gz ]; then
             tar xzf ../../data/manga/browser_general.tar.gz
+            echo "  （控えから browser_general を展開しました）"
           fi
 
       - name: 反応の多い時間を測り直す（月に1回・1日の朝）
