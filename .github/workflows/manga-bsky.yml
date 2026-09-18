@@ -184,18 +184,25 @@ jobs:
             cp -f $f ../../data/manga/ 2>/dev/null || true
           done
           # ★失敗の中身は非公開側の記録へ★ 公開側には出さない
-          mkdir -p ../../runlog
-          tail -c 60000 bsky.log > ../../runlog/bsky.txt 2>/dev/null || true
-          cp -f bsky.code ../../runlog/bsky.code 2>/dev/null || true
+          # ★★★ ログは checkout の後に置く ★★★（2026-09-19）
+          #   ■AIへ■ 前は runlog/ に書いてから `git checkout -- .` で全部戻していたので、
+          #     bsky.txt / bsky.code が毎回消え、9/9から一度も保存されていなかった。
+          #     「なぜ投稿しなかったか」を誰も見られない状態だった。
+          #     順番：控えを /tmp に逃がす → checkout → pull → 控えとログを戻す → add。
+          mkdir -p /tmp/keep /tmp/keeplog
+          tail -c 60000 bsky.log > /tmp/keeplog/bsky.txt 2>/dev/null || true
+          cp -f bsky.code /tmp/keeplog/bsky.code 2>/dev/null || true
           cd ..
           cd ..
           git config user.name "duck"
           git config user.email "duck@imadake.local"
-          mkdir -p /tmp/keep
           cp -f data/manga/*.json /tmp/keep/ > /dev/null 2>&1 || true
           git checkout -- . > /dev/null 2>&1 || true
           git pull --rebase -q origin main > /dev/null 2>&1 || true
           cp -f /tmp/keep/*.json data/manga/ > /dev/null 2>&1 || true
+          mkdir -p runlog
+          cp -f /tmp/keeplog/bsky.txt runlog/bsky.txt > /dev/null 2>&1 || true
+          cp -f /tmp/keeplog/bsky.code runlog/bsky.code > /dev/null 2>&1 || true
           git add data/manga/ runlog/ > /dev/null 2>&1 || true
           git diff --cached --quiet || git commit -q -m "bsky: $(date +%F_%H%M)" > /dev/null 2>&1 || true
           git push -q "https://x-access-token:${GH}@github.com/hoshiyomi-luna/uranai-luna.git" HEAD:main > /dev/null 2>&1 \
