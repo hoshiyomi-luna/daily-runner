@@ -47,7 +47,62 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ★★★ 同じ30分枠で2回目なら、何もしない ★★★（2026-09-19）
+  #   ■AIへ■ 時計が2つある（duck-cron→/api/bsky/kick と shirouto-proxy の cron）。
+  #     どちらも毎30分にこの workflow を起こすので、9/15から毎回2回動いていた
+  #     （順番待ちで連続実行、時々 cancelled）。shirouto-proxy の元コードは
+  #     どのリポにも無く直せないので、受け口のここで弾く。
+  #   ★25分以内に自分以外の起動があれば dup=1★ 正しい次の起動は30分後なので通る。
+  #   ★この門は絶対に失敗させない★（失敗すると本体が飛ばされる）。取れなければ dup=0。
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      dup: ${{ steps.d.outputs.dup }}
+    steps:
+      - id: d
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          dup=0
+          curl -s --max-time 20 -H "Authorization: Bearer $GH_TOKEN" \
+               -H "Accept: application/vnd.github+json" \
+               "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/manga-bsky.yml/runs?per_page=8" \
+               -o /tmp/runs.json
+          cat > /tmp/dup.py <<'PY'
+          import sys, json, datetime
+          me, path = sys.argv[1], sys.argv[2]
+          try:
+              runs = json.load(open(path)).get("workflow_runs", [])
+          except Exception:
+              print(0); raise SystemExit
+          def _t(r):
+              return datetime.datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+          mine = next((r for r in runs if str(r.get("id")) == me), None)
+          my_t = _t(mine) if mine else datetime.datetime.now(datetime.timezone.utc)
+          my_id = int(me) if me.isdigit() else 0
+          # ★自分より前に起きた（同時刻なら番号が小さい）ものだけ見る★
+          #   後から起きた方を見ると、1回目も「2回目がある」と思って両方止まる（手元で実測）。
+          for r in runs:
+              if str(r.get("id")) == me:
+                  continue
+              if r.get("conclusion") not in (None, "success"):
+                  continue                       # cancelled/failure は数えない
+              t = _t(r)
+              earlier = t < my_t or (t == my_t and int(r.get("id", 0)) < my_id)
+              if earlier and (my_t - t).total_seconds() < 25 * 60:
+                  print(1); raise SystemExit
+          print(0)
+          PY
+          dup=$(python3 /tmp/dup.py "$GITHUB_RUN_ID" /tmp/runs.json 2>/dev/null || echo 0)
+          case "$dup" in 1) ;; *) dup=0 ;; esac
+          echo "dup=$dup" >> "$GITHUB_OUTPUT"
+          if [ "$dup" = "1" ]; then echo "  同じ30分枠の2回目なので、今回は何もしません"; else echo "  今回が枠の1回目です"; fi
+
   run:
+    needs: check
+    if: needs.check.outputs.dup != '1'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
