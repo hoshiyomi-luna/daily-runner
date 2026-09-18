@@ -262,14 +262,32 @@ jobs:
           timeout 300 python3 fix_sched.py --days 7 2>&1 | tail -3 || true
           if grep -q "作った動画 1 本" duck.log; then
             echo "  ○ 1本作りました"
+            # ★★★ 作った動画を保管庫（imadake-duck）へ上げる ★★★（2026-09-18）
+            #   ■AIへ■ mp4 は .gitignore で持ち帰られない。ここで保管庫へ送らないと
+            #     実行が終わった時点で動画が消え、予約だけが残る（実際にそうなっていた）。
+            #     前は auto_daily が「本体の配信が門番を通った後」にだけ送っていた。
+            timeout 900 python3 duck_vault.py > vault.log 2>&1 || true
+            if grep -qE "Success!|送りました|配信しました" vault.log; then
+              echo "  ○ 保管庫へ送りました"
+            else
+              echo "★中止★ 保管庫へ送れませんでした（動画が本番に残りません）"
+              tail -3 vault.log | sed -E 's/[0-9]{3,}/…/g'
+              exit 1
+            fi
           else
             echo "  ★作れませんでした（中身は出しません）"
+            # ★1本も作れなかった夜は赤くする★ 予約は毎日1本ずつ減る。黙って success にしない。
+            _ng=1
           fi
           # ★★★ 環境の不備は隠さない ★★★（2026-09-17）
           #   ■AIへ■ 道具・部品が無い失敗は、この工程を赤くする（|| true で飲まない）。
           #     ただし記録の持ち帰りは if: always() なので、ログは非公開リポに残る。
           if grep -qE "ffprobe|ffmpeg|cannot open resource|No module named|道具が無い" duck.log; then
             echo "★中止★ 道具が無くて作れませんでした。「支度」を確かめてください。"
+            exit 1
+          fi
+          if [ "${_ng:-0}" = "1" ]; then
+            echo "★中止★ 今夜は1本も作れませんでした。duck.txt（非公開リポ runlog）を見てください。"
             exit 1
           fi
 
