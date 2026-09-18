@@ -29,16 +29,13 @@
 name: manga-daily
 
 on:
-  schedule:
-    # ★★★ GitHubのcronは世界時(UTC)しか使えない ★★★
-    #   ■AIへ■ 日本時間では書けない。必ず9時間引くこと。
-    #     日本 01:00 → UTC 16:00  ← いまここ
-    #     日本 02:00 → UTC 17:00
-    #     日本 03:00 → UTC 18:00（素人動画・daily.yml）
-    #   ★書いてある数字と実際に動く時刻が違う★
-    #     これで日付が1日ずれる事故が起きた（2026-09-05）。
-    #   ★中のコードは jst_today() で日本時間に直している★
-    - cron: "0 16 * * *"
+  # ★★★ GitHub の schedule（cron）は書かない ★★★（2026-09-13の決まり／2026-09-18に再確認）
+  #   ■AIへ■ GitHub の schedule は間引かれて黙って止まる（2026-09-13まで実際に止まっていた）。
+  #     時計は Cloudflare の duck-cron（30分ごと）だけ。それが /api/kick/daily で
+  #     この workflow_dispatch を毎日 01:00（日本時間）に起こす。
+  #     check_cron.py（門番）が「schedule: が無いこと」を確かめ、あれば配信を止める。
+  #   ★2026-09-14 の直しで schedule が復活し、門番が「時計がおかしい」で止まり続けた★
+  #     毎日2回（01:00 と 04:38）動いてもいた。ここに cron を足してはいけない。
   workflow_dispatch:
 
 concurrency:
@@ -192,6 +189,10 @@ jobs:
         env:
           MANGA_DATA_DIR: ${{ github.workspace }}/work/scripts/manga
           DMM_API_ID: ${{ secrets.DMM_API_ID }}
+          # ★門番（check_cron.py）が GitHub のワークフローを読むための鍵★
+          #   ■AIへ■ 2026-09-14 の直しでここから消え、門番が「鍵が無く schedule を
+          #     確かめられません」で止まり続けた。読み取り専用の細かい権限の鍵でよい。
+          SRC_TOKEN: ${{ secrets.SRC_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
