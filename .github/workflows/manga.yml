@@ -309,7 +309,7 @@ jobs:
           #     これが無いと、失敗の理由が一生分からない。
           mkdir -p runlog
           for f in scripts/manga/run.log scripts/manga/duck.log \
-                   scripts/manga/key.log; do
+                   scripts/manga/key.log scripts/manga/vault.log; do
             b=$(basename "$f" .log)
             [ -f "$f" ] && tail -c 200000 "$f" > "runlog/${b}.txt" || true
           done

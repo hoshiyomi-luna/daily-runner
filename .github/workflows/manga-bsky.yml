@@ -264,7 +264,18 @@ jobs:
           cd ..
           git config user.name "duck"
           git config user.email "duck@imadake.local"
-          cp -f data/manga/*.json /tmp/keep/ > /dev/null 2>&1 || true
+          # ★★★ 戻すのは自分の記録だけ ★★★（2026-09-19）
+          #   ■AIへ■ 前は data/manga/*.json を全部 /tmp に逃がし、pull の後で全部戻していた。
+          #     すると pull で入ってきた他の commit（台帳・素材庫・固定語の直し）を
+          #     古い写しで潰す。実際に 2026-09-18 15:22 の bsky commit が、その1分前に
+          #     入った素材庫の修理（468→215）と台帳（おたまじゃくし purged）を巻き戻し、
+          #     夜の更新が古い状態で動いた。★このworkflowが書くファイルだけを戻す★
+          for f in sns_posted.json follow_state.json reply_state.json \
+                   bsky_posted.json bsky_session.json bsky_hours.json \
+                   hatena_posted.json hatena_series_done.json \
+                   hatena_seo.json like_score.json; do
+            cp -f data/manga/$f /tmp/keep/ > /dev/null 2>&1 || true
+          done
           git checkout -- . > /dev/null 2>&1 || true
           git pull --rebase -q origin main > /dev/null 2>&1 || true
           cp -f /tmp/keep/*.json data/manga/ > /dev/null 2>&1 || true
