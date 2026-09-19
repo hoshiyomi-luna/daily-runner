@@ -250,6 +250,19 @@ jobs:
           #     それは並びを一から作り直す。写真に紐づく作品・合言葉が
           #     毎晩変わってしまう。--cuts-only は並びを変えない。
           timeout 300 python3 stock_order.py --cuts-only 2>&1 | tail -1 || true
+          # ★★★ 作る前に「保管庫へ送れる環境か」を確かめる ★★★（2026-09-19）
+          #   ■AIへ■ 昨夜、動画を作った後で保管庫へ送れず、動画が消えて予約だけ残った
+          #     （こなゆき）。送れない環境なら作る前に止める。既存の動画・投稿文が
+          #     全部そろっているか、鍵と wrangler が使えるかが、ここで分かる。
+          timeout 900 python3 duck_vault.py > vault_pre.log 2>&1 || true
+          if grep -qE "Success!|配信しました" vault_pre.log; then
+            echo "  ○ 保管庫へ送れる環境です（既存の分を送り直しました）"
+          else
+            echo "★中止★ 保管庫へ送れない環境なので、今夜は作りません（動画が消えるのを防ぐ）"
+            tail -5 vault_pre.log | sed -E 's/[0-9]{3,}/…/g'
+            cp -f vault_pre.log vault.log
+            exit 1
+          fi
           # ★daily_duck.py が最初に素材庫を点検（stock_order.repair）してから1本作る★
           #   ■AIへ■ 使用済み・著作権アウト・同じ絵柄・切り抜けない行を外し、
           #     合言葉の重複・使用済みを付け直す。順番と写真↔作品の組は変えない。
