@@ -333,6 +333,15 @@ jobs:
                    phash.json face_cache.json; do
             cp -f "scripts/manga/$f" "data/manga/$f" 2>/dev/null || true
           done
+          # ★★★ 秘密ページの控え（secret_out.tar.gz）も毎晩取り直す ★★★（2026-09-22）
+          #   ■AIへ■ この控えは 9/13 に1回作ったきりで、更新の最初に毎晩展開される。
+          #     だから門番は毎晩 9/13 の works.json（作品リンク）を見て「13件開けない」と
+          #     止め続けた。daily_duck が引き直した新しい秘密ページを、ここで控えに写す。
+          #     動画と絵の元（mp4/png）は保管庫にあるので入れない（大きい）。
+          if [ -d scripts/manga/secret_out/secret ]; then
+            tar czf data/manga/secret_out.tar.gz -C scripts/manga \
+                --exclude='*.mp4' --exclude='*.png' secret_out 2>/dev/null || true
+          fi
           for f in scripts/manga/run.log scripts/manga/duck.log \
                    scripts/manga/key.log scripts/manga/vault.log; do
             b=$(basename "$f" .log)
