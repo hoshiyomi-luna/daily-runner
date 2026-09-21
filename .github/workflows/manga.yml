@@ -321,6 +321,18 @@ jobs:
           #     ★拡張子を .txt にして残すこと★
           #     これが無いと、失敗の理由が一生分からない。
           mkdir -p runlog
+          # ★★★ 途中の記録を控え（data/manga）へ写してから保存する ★★★（2026-09-21）
+          #   ■AIへ■ 「更新」の最初で data/manga/*.json を scripts/manga へ戻す。
+          #     でも終わりに scripts/manga → data/manga へ写していなかった。
+          #     だから素材庫は毎晩 468 行の古い控えに戻り、点検が毎晩同じ 253 行を外し、
+          #     台帳の purged も戻り、保管庫の守りが「動画が無い」で止まり続けた
+          #     （2026-09-20・21 に実測）。ここで必ず写す。
+          for f in duck_ledger.json stock_order.json photo_password.json \
+                   photo_password_dropped.json purged.json make_fail.json \
+                   secret_blocks.jsonl secret_works.json passwords.json \
+                   phash.json face_cache.json; do
+            cp -f "scripts/manga/$f" "data/manga/$f" 2>/dev/null || true
+          done
           for f in scripts/manga/run.log scripts/manga/duck.log \
                    scripts/manga/key.log scripts/manga/vault.log; do
             b=$(basename "$f" .log)
