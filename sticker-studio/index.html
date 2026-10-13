@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#17243b">
 <title>STICKER STUDIO｜LINEスタンプ制作ツール</title>
 <!--
-  STICKER STUDIO v2
+  STICKER STUDIO v3
   ・APIなし（お金がかからない）。ChatGPTとの行き来は「押す → 貼る」だけ。
   ・ChatGPTの返事は、決まった形（[[STICKER_STUDIO:種類]]）のコードブロックで受け取り、自動で欄に入れる。
   ・画像は「画像を貼り付け」または「写真から選ぶ」で入れると、自動で切り分け・透明化・ふちどりをする。
@@ -178,11 +178,11 @@ details summary{font-size:12px;color:var(--muted);cursor:pointer}
     <h2>② 商品企画とセリフ</h2>
     <p class="sub">①の結果をもとに、ChatGPTが企画とセリフ（表情・ポーズつき）を作ります。貼り付けると全部の欄に入ります。</p>
     <div class="grid">
-      <div class="field"><label>キャラクター名</label><input id="character" value="まじめな白うさぎ"></div>
-      <div class="field"><label>キャラクターの種類</label><input id="species" value="白うさぎ"></div>
-      <div class="field"><label>買う人・使う人</label><input id="audience" value="仕事で丁寧な返信をしたい人"></div>
-      <div class="field"><label>使う場面</label><input id="usecase" value="職場・日常の連絡"></div>
-      <div class="field"><label>画風</label><input id="style" value="シンプル、やさしい線、淡い色、読みやすい文字"></div>
+      <div class="field"><label>キャラクター名</label><input id="character" placeholder="空でOK（①の調査で自動で入ります）"></div>
+      <div class="field"><label>キャラクターの種類</label><input id="species" placeholder="空でOK"></div>
+      <div class="field"><label>買う人・使う人</label><input id="audience" placeholder="空でOK"></div>
+      <div class="field"><label>使う場面</label><input id="usecase" placeholder="空でOK"></div>
+      <div class="field"><label>画風</label><input id="style" placeholder="空でOK"></div>
       <div class="field"><label>スタンプの数</label><select id="count"><option value="40">40個</option><option value="32">32個</option><option value="24">24個</option><option value="16">16個</option><option value="8">8個</option></select></div>
     </div>
     <div class="field"><label>差別化ポイント</label><textarea id="differentiator" placeholder="例：丁寧だけど堅すぎない、短文、返信に迷わない"></textarea></div>
@@ -359,7 +359,7 @@ details summary{font-size:12px;color:var(--muted);cursor:pointer}
   </div>
 </section>
 
-<div class="footer">STICKER STUDIO v2 · 公開前に公式規定・画像内容を最終確認してください。</div>
+<div class="footer">STICKER STUDIO v3 · 公開前に公式規定・画像内容を最終確認してください。</div>
 </div>
 
 <!-- いつでも押せる「貼り付け」ボタン -->
@@ -391,6 +391,12 @@ const $ = id => document.getElementById(id);
 const CHAT_URL = 'https://chatgpt.com/';
 const URL_LIMIT = 12000;            // これより長いお願いの文は、URLに入れずにコピーだけにする
 const RESEARCH_IN_PROMPT = 700;     // ②⑤のお願いの文に入れる調査まとめの最大文字数（長いとURLに入らないため）
+const OLD_DEFAULTS={character:'まじめな白うさぎ',species:'白うさぎ',audience:'仕事で丁寧な返信をしたい人',usecase:'職場・日常の連絡',style:'シンプル、やさしい線、淡い色、読みやすい文字'};
+function orAuto(id){ return val(id)||'（未定：市場調査の結果から、いちばん売れそうなものを決めてください）'; }
+function ideaNote(){
+  const parts=[['キャラ','character'],['種類','species'],['使う人','audience'],['場面','usecase'],['画風','style'],['差別化','differentiator'],['メモ','hypothesis']].filter(([,id])=>val(id)).map(([l,id])=>l+'='+val(id));
+  return parts.length ? '自分で決めている案：'+parts.join('、')+'\n（この案に合うかどうかも調べて、合わなければ、もっと良い案を出してください）\n' : '案はまだ決めていません。決まった例に引っ張られず、調査の結果だけで、いちばん売れそうな案を選んでください。\n';
+}
 function shortResearch(){ const r=val('marketResult')||val('evidence'); return r.length>RESEARCH_IN_PROMPT ? r.slice(0,RESEARCH_IN_PROMPT)+'…（続きは、この会話の前の調査結果を使ってください）' : r; }
 const MARK = 'STICKER_STUDIO';      // 返事の見出し [[STICKER_STUDIO:種類]]
 const LS_FIELDS = 'stickerStudio_v2_fields';
@@ -545,8 +551,9 @@ function applyResearch(f){
   if(f.keywords){ setIf('keywords',f.keywords); if(!val('seoKeyword')) setIf('seoKeyword',f.keywords); }
   ['character','species','audience','usecase','style','differentiator','hypothesis'].forEach(k=>setIf(k,f[k]));
   if(f.score){
-    const map=[['sDemand',/根拠\D*(\d+)/],['sDiff',/差別化\D*(\d+)/],['sUse',/使いやすさ\D*(\d+)/],['sSeo',/検索\D*(\d+)/],['sCost',/(?:実現性|作りやすさ)\D*(\d+)/]];
-    map.forEach(([id,re])=>{ const m=f.score.match(re); if(m) $(id).value=Math.min(Number(m[1]),Number($(id).max)); });
+    const map=[['sDemand',/根拠/],['sDiff',/差別化/],['sUse',/使いやすさ/],['sSeo',/検索/],['sCost',/実現性|作りやすさ/]];
+    const rows=f.score.split(/\n/);
+    map.forEach(([id,re])=>{ const row=rows.find(r=>re.test(r)); if(!row) return; const m=row.replace(re,'').replace(/[\/／]\s*\d+/g,'').match(/\d+/); if(m) $(id).value=Math.min(Number(m[0]),Number($(id).max)); });
     score();
   }
   markDone('research');
@@ -602,14 +609,14 @@ function buildResearchPrompt(){
   +'調査日：'+(val('researchDate')||today())+'\n'
   +'市場：'+val('market')+'\n'
   +'調べたいキーワード：'+(val('keywords')||'（未入力：今売れているLINEスタンプのジャンルから調べてください）')+'\n'
-  +'今の案（あれば参考に）：キャラ='+val('character')+'、使う人='+val('audience')+'、場面='+val('usecase')+'\n'
-  +(val('hypothesis')?'メモ：'+val('hypothesis')+'\n':'')
+  +ideaNote()
   +'\nやること：\n'
   +'1. LINE STOREの実在商品・公式ランキング・商品ページを優先して調べる。\n'
   +'2. 競合を最大10件、商品名・URL・ページで確認できた特徴で比べる。確認できないことは「確認できず」と書く。\n'
   +'3. 関連する検索語、使われる場面、競合が多いところ、すき間（差別化できるところ）をまとめる。\n'
   +'4. 企画案を3つ作り、需要の手がかり・競合・差別化・作りやすさ・根拠の強さで比べて、いちばん良い案を1つ選ぶ。\n'
-  +'5. 事実と推測を分ける。販売数・順位・商品・URLを作り出さない。調べられなかったことは正直に書く。'
+  +'5. 事実と推測を分ける。販売数・順位・商品・URLを作り出さない。調べられなかったことは正直に書く。\n'
+  +'6. 返事の形の説明文は、書き方の説明です。内容のヒントではないので、そこに引っ張られないでください。'
   +replyFormat('research',[
     ['summary','調査のまとめ（事実と推測を分けて。いちばん良い案とその理由も）'],
     ['evidence','確認できた事実（商品名・URL・特徴を1行に1件）'],
@@ -623,17 +630,17 @@ function buildResearchPrompt(){
     ['style','画風'],
     ['differentiator','差別化ポイント'],
     ['hypothesis','企画の仮説（根拠と仮説を分けて）'],
-    ['score','根拠:0〜30の数字\n差別化:0〜25の数字\n使いやすさ:0〜20の数字\n検索:0〜15の数字\n実現性:0〜10の数字']
+    ['score','根拠: ?/30\n差別化: ?/25\n使いやすさ: ?/20\n検索: ?/15\n実現性: ?/10\n（? を点数に書きかえる）']
   ]);
 }
 function buildPlanPrompt(){
   const n=Number(val('count'));
   return 'あなたはLINEスタンプの商品企画の担当です。市場調査の結果を根拠に、売れる企画を作ってください。\n'
-  +'キャラクター：'+val('character')+'\n種類：'+val('species')+'\n買う人：'+val('audience')+'\n使う場面：'+val('usecase')+'\n画風：'+val('style')+'\nスタンプの数：'+n+'個\n差別化：'+val('differentiator')+'\n'
+  +'キャラクター：'+orAuto('character')+'\n種類：'+orAuto('species')+'\n買う人：'+orAuto('audience')+'\n使う場面：'+orAuto('usecase')+'\n画風：'+orAuto('style')+'\nスタンプの数：'+n+'個\n差別化：'+orAuto('differentiator')+'\n'
   +'市場調査の結果：\n'+(shortResearch()||'未入力。需要を決めつけず、仮説として書いてください。')+'\n\n'
   +'きまり：\n'
   +'・セリフはちょうど'+n+'個。重ならない。短く（できれば10文字くらいまで）、実際のトークで使いやすい言葉。\n'
-  +'・あいさつ・返事・お礼・おわび・気持ちなど、使う場面がかたよらないようにする。\n'
+  +'・この企画の買う人が、実際のトークで本当に使う言葉にする（定番のあいさつを入れるかどうかも企画しだい。決まった例に引っ張られない）。\n'
   +'・セリフごとに、合う表情・ポーズを短く書く。\n'
   +'・根拠のない売上予想はしない。最後に数を数えて'+n+'個か確かめる。'
   +replyFormat('plan',[
@@ -698,7 +705,7 @@ function buildSheetPrompt(b,total,useRef){
   const lines=b.items.map((x,i)=>(b.start+i+1)+'. 「'+x+'」'+(b.poses[i]?' — '+b.poses[i]:' — セリフに合う表情とポーズ')).join('\n');
   return '画像を1枚生成してください。LINEスタンプの一覧画像（'+(b.idx+1)+'枚目／全'+total+'枚）です。\n'
   +(b.idx>0||useRef?'\n【前と同じキャラクター】'+(useRef?'添付した見本画像':'この会話で前に作った画像')+'とまったく同じキャラクター・画風・色・線の太さで描いてください。\n':'')
-  +'\n【キャラクター】\n名前：'+val('character')+'\n種類：'+val('species')+'\n画風：'+val('style')+'\n'
+  +'\n【キャラクター】\n名前：'+orAuto('character')+'\n種類：'+orAuto('species')+'\n画風：'+(val('style')||'この企画に合う、スタンプで見やすい画風（1枚目で決めたら、そのあとも同じ）')+'\n'
   +'\n【並べ方】\n横'+b.cols+'個×縦'+b.rows+'段＝'+b.count+'個。画像の形：'+shapeOf(b.cols,b.rows)+'。\n'
   +'1マスにスタンプ1個。マスとマスの間を広くあけて、絵や文字がとなりとくっつかないようにしてください。マスの線・枠線・番号は描かないでください。背景は真っ白の単色（模様・影・グラデーションなし）。\n'
   +'\n【スタンプ（左上から右へ、次の段へ）】\n'+lines+'\n'
@@ -1063,6 +1070,7 @@ document.addEventListener('drop',async e=>{ e.preventDefault(); const files=[...
    ========================================================= */
 (async function init(){
   applyFields(lsGet(LS_FIELDS,null));
+  Object.entries(OLD_DEFAULTS).forEach(([id,v])=>{ if($(id).value===v) $(id).value=''; });
   if(!val('researchDate')) $('researchDate').value=today();
   state=Object.assign({sheets:{},fixes:[],mainIdx:0,expect:null},lsGet(LS_STATE,{}));
   score();
