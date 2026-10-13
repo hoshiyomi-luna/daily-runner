@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17243b">
+<title>STICKER STUDIO｜LINEスタンプ制作ツール</title>
+<!--
+  STICKER STUDIO v2
+  ・APIなし（お金がかからない）。ChatGPTとの行き来は「押す → 貼る」だけ。
+  ・ChatGPTの返事は、決まった形（[[STICKER_STUDIO:種類]]）のコードブロックで受け取り、自動で欄に入れる。
+  ・画像は「画像を貼り付け」または「写真から選ぶ」で入れると、自動で切り分け・透明化・ふちどりをする。
+  ・入力した内容は自動保存（文字＝localStorage、画像＝IndexedDB）。
+  構成：①CSS ②HTML ③JS（共通 → 保存 → ChatGPT連携 → 返事の読み取り → ①②⑤の指示 → ③画像 → ④仕上げ → 貼り付け窓口 → 起動）
+-->
+<style>
+:root{--navy:#17243b;--ink:#202838;--muted:#697386;--line:#e3e7ee;--bg:#f5f7fb;--gold:#e8b94d;--green:#16794b;--red:#b42318;--warn:#9a6700}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Segoe UI",sans-serif;line-height:1.55}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+.app{max-width:960px;margin:auto;padding:12px 12px 110px}
+.hero{background:linear-gradient(135deg,#17243b,#293e60);color:#fff;border-radius:20px;padding:20px 18px;margin-bottom:12px}
+.eyebrow{font-size:11px;letter-spacing:.15em;color:#e8c66e;font-weight:800}
+.hero h1{font-size:25px;margin:6px 0}
+.hero p{font-size:13px;color:#d9e2ef;margin:0}
+.notice{background:#fff8e7;border:1px solid #f2dfad;border-radius:12px;padding:12px;font-size:12px;margin-bottom:12px}
+.notice ol{margin:6px 0 0;padding-left:20px}
+.nav{display:flex;gap:6px;overflow:auto;position:sticky;top:0;z-index:5;background:var(--bg);padding:4px 0 12px}
+.nav button{white-space:nowrap;border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 12px;font-size:12px;color:var(--ink)}
+.nav button.active{background:var(--navy);color:#fff}
+.nav button .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);margin-left:5px;vertical-align:middle;visibility:hidden}
+.nav button.done .dot{visibility:visible}
+.panel{display:none}.panel.active{display:block}
+.card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:15px;margin-bottom:12px;box-shadow:0 3px 12px #16233b08}
+.card h2{font-size:18px;margin:0 0 4px}
+.card h3{font-size:15px;margin:14px 0 6px}
+.sub,.small{font-size:12px;color:var(--muted)}
+.sub{margin:0 0 12px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:11px}
+.field label{font-size:13px;font-weight:700}
+.field input:not([type=checkbox]):not([type=file]),.field textarea,.field select{width:100%;border:1px solid #cfd6e2;border-radius:9px;background:#fff;padding:10px 11px;color:var(--ink)}
+textarea{min-height:85px;resize:vertical}
+.btn{border:0;background:var(--navy);color:#fff;padding:10px 13px;border-radius:9px;font-weight:700;font-size:13px}
+.btn.secondary{background:#eef1f6;color:var(--ink);border:1px solid var(--line)}
+.btn.gold{background:var(--gold);color:#222}
+.btn.big{padding:13px 16px;font-size:15px}
+.btn.danger{background:#fdecea;color:var(--red);border:1px solid #f5c2bc}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}
+.flow{display:grid;grid-template-columns:1fr;gap:8px;margin-top:6px}
+.flow .step{display:flex;gap:10px;align-items:center;background:#f7f8fb;border:1px solid var(--line);border-radius:12px;padding:10px}
+.flow .num{flex:0 0 26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
+.flow .step .txt{flex:1;font-size:13px}
+.flow .step .btn{flex:0 0 auto}
+.output{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f8fb;border:1px solid var(--line);border-radius:9px;padding:10px;font-size:12px;max-height:260px;overflow:auto}
+details{margin-top:8px}
+details summary{font-size:12px;color:var(--muted);cursor:pointer}
+.metric{background:#f7f8fb;border-radius:11px;padding:12px}
+.metric strong{display:block;font-size:22px}
+.metric span{font-size:11px;color:var(--muted)}
+.scorebar{height:7px;background:#e9edf3;border-radius:99px;overflow:hidden;margin-top:7px}
+.scorebar div{height:100%;background:#d7a62f;width:0}
+.status{font-size:12px;margin-top:8px;white-space:pre-wrap}
+.ok{color:var(--green)}.warn{color:var(--warn)}.err{color:var(--red)}
+.checkrow{display:flex;gap:8px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #edf0f5;font-size:12px}
+.checkrow:last-child{border:0}
+.checkrow input{margin-top:4px}
+.batch{border:1px solid var(--line);border-radius:12px;padding:11px;margin-bottom:9px;background:#fbfcfe}
+.batch.has{border-color:#9fd3b8;background:#f3fbf6}
+.batch.expect{box-shadow:0 0 0 2px var(--gold)}
+.batch-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.batch-head b{font-size:14px}
+.batch-lines{font-size:11px;color:var(--muted);margin:5px 0;overflow-wrap:anywhere}
+.batch-grid{display:flex;gap:6px;align-items:center;font-size:12px;margin-top:6px}
+.batch-grid input{width:56px;border:1px solid #cfd6e2;border-radius:7px;padding:5px}
+.batch img.thumb{display:block;max-width:100%;max-height:150px;margin-top:8px;border-radius:8px;border:1px solid var(--line);background:#fff}
+.filebtn{position:relative;overflow:hidden;display:inline-block}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.sticker-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}
+.sticker{background:#f7f8fb;border:2px solid var(--line);border-radius:9px;padding:4px;text-align:center;min-width:0;cursor:pointer;position:relative}
+.sticker.sel{border-color:var(--gold);box-shadow:0 0 0 2px #e8b94d66}
+.sticker canvas{width:100%;height:auto;display:block;background-color:#fff;background-image:linear-gradient(45deg,#eceef3 25%,transparent 25%,transparent 75%,#eceef3 75%),linear-gradient(45deg,#eceef3 25%,#fff 25%,#fff 75%,#eceef3 75%);background-size:12px 12px;background-position:0 0,6px 6px;border-radius:6px}
+.sticker .cap{font-size:10px;overflow-wrap:anywhere;margin-top:2px}
+.sticker .badge{position:absolute;top:3px;left:3px;font-size:9px;background:var(--navy);color:#fff;border-radius:6px;padding:1px 5px}
+.sticker .badge.fix{left:auto;right:3px;background:var(--green)}
+.selbox{background:#fff8e7;border:1px solid #f2dfad;border-radius:12px;padding:11px;margin-top:10px;font-size:13px}
+.pastebar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:#ffffffee;backdrop-filter:blur(6px);border-top:1px solid var(--line);padding:9px 12px calc(9px + env(safe-area-inset-bottom))}
+.pastebar .in{max-width:960px;margin:auto;display:flex;gap:8px;align-items:center}
+.pastebar .btn{flex:1;padding:13px 10px;font-size:15px}
+.pastebar .expect{flex:0 0 auto;max-width:42%;font-size:11px;color:var(--muted);line-height:1.3}
+.toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%);z-index:30;background:#17243b;color:#fff;font-size:13px;padding:10px 14px;border-radius:12px;max-width:92%;box-shadow:0 6px 20px #0003;display:none;white-space:pre-wrap}
+.toast.show{display:block}
+.toast.err{background:#7a1d14}
+.modal{position:fixed;inset:0;z-index:40;background:#0008;display:none;align-items:flex-end;justify-content:center}
+.modal.show{display:flex}
+.modal .box{background:#fff;width:100%;max-width:640px;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+.modal textarea{width:100%;min-height:120px;border:2px dashed var(--gold);border-radius:12px;padding:12px;font-size:15px}
+.footer{text-align:center;color:var(--muted);font-size:10px;padding:15px 0}
+@media(max-width:600px){.app{padding:9px 9px 110px}.hero{padding:17px 15px}.hero h1{font-size:23px}.grid{grid-template-columns:1fr}.card{padding:13px}.sticker-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="hero">
+  <div class="eyebrow">MOBILE-FIRST CREATOR WORKFLOW</div>
+  <h1>STICKER STUDIO</h1>
+  <p>市場調査 → 商品企画 → ChatGPTで画像 → 切り分け・透明化 → タイトル → 申請</p>
+</header>
+
+<div class="notice">
+  <b>使い方（押す → 貼る だけ）</b>
+  <ol>
+    <li>金色の「ChatGPTで〜」を押す → ChatGPTが開いて、お願いの文が入った状態になります（入っていなかったら、入力欄を長押し→ペースト）。</li>
+    <li>ChatGPTの返事の最後にある四角い枠（コードブロック）の「コピー」を押す。画像なら画像を長押し→「コピー」。</li>
+    <li>ここに戻って、いちばん下の「📋 ChatGPTの返事を貼り付け」を押す → 自動で入力されます。</li>
+  </ol>
+  <div class="small" style="margin-top:6px">APIは使わないので、ChatGPTのいつものプラン以外にお金はかかりません。入力は自動で保存されます。売上・検索順位・審査通過を約束するものではありません。</div>
+</div>
+
+<div class="actions" style="margin:0 0 10px">
+  <button class="btn secondary" id="openStoreTop">LINE STOREを開く</button>
+  <button class="btn gold" id="openCreatorsTop">スタンプを申請する</button>
+</div>
+
+<nav class="nav">
+  <button class="active" data-tab="research">①市場調査<span class="dot"></span></button>
+  <button data-tab="plan">②商品企画<span class="dot"></span></button>
+  <button data-tab="prompt">③画像を作る<span class="dot"></span></button>
+  <button data-tab="files">④仕上げ・ZIP<span class="dot"></span></button>
+  <button data-tab="seo">⑤タイトル・申請<span class="dot"></span></button>
+</nav>
+
+<!-- ===================== ① 市場調査 ===================== -->
+<section id="research" class="panel active">
+  <div class="card">
+    <h2>① 市場調査</h2>
+    <p class="sub">ChatGPTにWeb検索で調べてもらい、結果を貼り付けると、この下と②の欄に自動で入ります。</p>
+    <div class="grid">
+      <div class="field"><label>調査する市場</label><select id="market"><option>日本</option><option>英語圏</option><option>台湾</option><option>韓国</option><option>その他</option></select></div>
+      <div class="field"><label>調査日</label><input id="researchDate" type="date"></div>
+    </div>
+    <div class="field"><label>調べたいキーワード（空でもOK）</label><input id="keywords" placeholder="例：敬語 うさぎ スタンプ"></div>
+
+    <div class="flow">
+      <div class="step"><div class="num">1</div><div class="txt">ChatGPTに調べてもらう</div><button class="btn gold" id="runResearch">ChatGPTで調べる</button></div>
+      <div class="step"><div class="num">2</div><div class="txt">返事の枠の「コピー」→ ここに戻る</div><button class="btn" data-paste="research">返事を貼り付け</button></div>
+    </div>
+    <div id="researchStatus" class="status"></div>
+
+    <h3>調査のまとめ（自動で入ります）</h3>
+    <div class="field"><textarea id="marketResult" style="min-height:140px" placeholder="ChatGPTの調査結果がここに入ります"></textarea></div>
+    <div class="field"><label>確認できた事実（商品名・URL・特徴）</label><textarea id="evidence"></textarea></div>
+    <div class="field"><label>競合が多いところ・足りない用途</label><textarea id="competitors"></textarea></div>
+    <div class="field"><label>参照したURL</label><textarea id="sourceUrl" style="min-height:60px"></textarea></div>
+    <details><summary>ChatGPTに送ったお願いの文を見る</summary><div class="output" id="researchPrompt">まだ作っていません。</div><div class="actions"><button class="btn secondary" data-copyout="researchPrompt" data-status="researchStatus">お願いの文をコピー</button></div></details>
+  </div>
+
+  <div class="card">
+    <h2>企画スコア</h2>
+    <p class="sub">比べるための目安です（売上の予想ではありません）。調査を貼り付けると自動で入ります。</p>
+    <div class="grid">
+      <div class="field"><label>公開データの根拠（0〜30）</label><input id="sDemand" type="number" min="0" max="30" value="0"></div>
+      <div class="field"><label>競合との差別化（0〜25）</label><input id="sDiff" type="number" min="0" max="25" value="0"></div>
+      <div class="field"><label>会話での使いやすさ（0〜20）</label><input id="sUse" type="number" min="0" max="20" value="0"></div>
+      <div class="field"><label>検索語との合い方（0〜15）</label><input id="sSeo" type="number" min="0" max="15" value="0"></div>
+      <div class="field"><label>作りやすさ（0〜10）</label><input id="sCost" type="number" min="0" max="10" value="0"></div>
+    </div>
+    <div class="metric"><strong id="totalScore">0 / 100</strong><span>企画をくらべるためのスコア</span><div class="scorebar"><div id="scoreBar"></div></div></div>
+  </div>
+</section>
+
+<!-- ===================== ② 商品企画 ===================== -->
+<section id="plan" class="panel">
+  <div class="card">
+    <h2>② 商品企画とセリフ</h2>
+    <p class="sub">①の結果をもとに、ChatGPTが企画とセリフ（表情・ポーズつき）を作ります。貼り付けると全部の欄に入ります。</p>
+    <div class="grid">
+      <div class="field"><label>キャラクター名</label><input id="character" value="まじめな白うさぎ"></div>
+      <div class="field"><label>キャラクターの種類</label><input id="species" value="白うさぎ"></div>
+      <div class="field"><label>買う人・使う人</label><input id="audience" value="仕事で丁寧な返信をしたい人"></div>
+      <div class="field"><label>使う場面</label><input id="usecase" value="職場・日常の連絡"></div>
+      <div class="field"><label>画風</label><input id="style" value="シンプル、やさしい線、淡い色、読みやすい文字"></div>
+      <div class="field"><label>スタンプの数</label><select id="count"><option value="40">40個</option><option value="32">32個</option><option value="24">24個</option><option value="16">16個</option><option value="8">8個</option></select></div>
+    </div>
+    <div class="field"><label>差別化ポイント</label><textarea id="differentiator" placeholder="例：丁寧だけど堅すぎない、短文、返信に迷わない"></textarea></div>
+    <div class="field"><label>企画の仮説（根拠と仮説を分ける）</label><textarea id="hypothesis"></textarea></div>
+
+    <div class="flow">
+      <div class="step"><div class="num">1</div><div class="txt">企画とセリフを作ってもらう</div><button class="btn gold" id="runPlan">ChatGPTで企画する</button></div>
+      <div class="step"><div class="num">2</div><div class="txt">返事の枠の「コピー」→ ここに戻る</div><button class="btn" data-paste="plan">返事を貼り付け</button></div>
+    </div>
+    <div id="planStatus" class="status"></div>
+    <div class="field" style="margin-top:10px"><label>企画のまとめ（自動で入ります）</label><textarea id="concept" style="min-height:90px"></textarea></div>
+    <details><summary>ChatGPTに送ったお願いの文を見る</summary><div class="output" id="planPrompt">まだ作っていません。</div><div class="actions"><button class="btn secondary" data-copyout="planPrompt" data-status="planStatus">お願いの文をコピー</button></div></details>
+  </div>
+
+  <div class="card">
+    <h2>セリフ一覧</h2>
+    <p class="sub">1行に1個。ChatGPTの返事を貼ると自動で入ります。自分で直してもOK。</p>
+    <div class="field"><label>セリフ（1行に1個）</label><textarea id="lines" style="min-height:300px" placeholder="ここにセリフが入ります"></textarea></div>
+    <div class="field"><label>表情・ポーズ（セリフと同じ順番・1行に1個・空でもOK）</label><textarea id="poses" style="min-height:160px"></textarea></div>
+    <div class="actions">
+      <button class="btn" id="checkLines">数と重なりをチェック</button>
+      <button class="btn secondary" id="generateLines">ChatGPTなしで仮のセリフを入れる</button>
+      <button class="btn secondary" id="copyLines">セリフをコピー</button>
+    </div>
+    <div id="lineStatus" class="status"></div>
+  </div>
+</section>
+
+<!-- ===================== ③ 画像を作る ===================== -->
+<section id="prompt" class="panel">
+  <div class="card">
+    <h2>③ ChatGPTで画像を作る</h2>
+    <p class="sub">数個ずつに分けて作ると、絵も文字もきれいになります。各「○枚目」のボタンを順番に押して、できた画像を貼り付けるだけです。</p>
+    <div class="grid">
+      <div class="field"><label>1枚の画像に入れる数</label>
+        <select id="perSheet">
+          <option value="8">8個ずつ（横4×縦2・いちばんきれい・おすすめ）</option>
+          <option value="12">12個ずつ（横4×縦3）</option>
+          <option value="16">16個ずつ（横4×縦4）</option>
+          <option value="24">24個ずつ（横4×縦6）</option>
+          <option value="40">40個まとめて（横5×縦8・文字がくずれやすい）</option>
+        </select>
+      </div>
+      <div class="field"><label>別のアカウントで続きを作るとき</label>
+        <label style="font-weight:400;font-size:13px"><input type="checkbox" id="refImage"> 1枚目の画像も「見本」として一緒にコピーする</label>
+        <span class="small">オンにすると、お願いの文はChatGPTに入った状態になり、見本画像がコピーされます。ChatGPTの入力欄を長押し→ペーストで画像を貼ってから送信してください。</span>
+      </div>
+    </div>
+    <div id="batchList"></div>
+    <div id="promptStatus" class="status"></div>
+    <details>
+      <summary>アカウントを切り替えて続きを作るには</summary>
+      <div class="small" style="margin-top:6px">
+        ・ChatGPTのブラウザ版（chatgpt.com）は、アカウントのメニューから2つまでログインしたまま切り替えられます（スマホのChatGPTアプリはまだ非対応）。<br>
+        ・3つ以上使うときは、Safari・Chrome・アプリなど開く場所ごとに別のアカウントでログインしておくと早いです。<br>
+        ・どのアカウントで作っても、ここに貼れば同じように切り分けられます。同じキャラにそろえたいときは上の「見本」をオンにしてください。<br>
+        ・回数制限をこえるためだけに何個もアカウントを使うと、OpenAIの規約にふれるおそれがあります。
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>きれいに作るためのきまり（お願いの文に入っています）</h2>
+    <div class="checkrow">✓　顔・耳・体型・配色・線の太さを全部そろえる。</div>
+    <div class="checkrow">✓　1マスに1個。となりとくっつけない。マスの線は描かない。</div>
+    <div class="checkrow">✓　セリフは1文字も変えない。ほかの文字や番号を入れない。</div>
+    <div class="checkrow">✓　背景は真っ白の単色。白い背景はこのツールで自動で透明にします。</div>
+  </div>
+</section>
+
+<!-- ===================== ④ 仕上げ・ZIP ===================== -->
+<section id="files" class="panel">
+  <div class="card">
+    <h2>④ 仕上げ・ZIP</h2>
+    <p class="sub">③で入れた画像を、自動で1個ずつに切り分けて、背景を透明にして、370×320pxにそろえます。スタンプをタップすると、直す・メイン画像にする、ができます。</p>
+    <div class="grid">
+      <div class="field"><label><input type="checkbox" id="whiteTransparent" checked> 白い背景を透明にする</label><span class="small">外側からつながっている白だけ消します（目や歯など、中の白は残ります）。</span></div>
+      <div class="field"><label><input type="checkbox" id="addOutline" checked> 白いふちどりを付ける</label><span class="small">LINEのトークで背景が暗くても見やすくなります。</span></div>
+      <div class="field"><label><input type="checkbox" id="autoCut" checked> 切る位置を自動で調整する</label><span class="small">絵のすき間を探して切ります。おかしい時はオフにすると等分で切ります。</span></div>
+    </div>
+    <div id="sliceSummary" class="status"></div>
+    <div id="previewGrid" class="sticker-grid"></div>
+
+    <div id="selBox" class="selbox" style="display:none">
+      <div><b id="selTitle"></b></div>
+      <div class="actions">
+        <button class="btn secondary" id="setMain">これをメイン・タブ画像にする</button>
+        <button class="btn danger" id="undoFix" style="display:none">直した画像をやめて元に戻す</button>
+      </div>
+      <h3>このスタンプを直す</h3>
+      <div class="field"><label>直したいところ（いくつでも）</label>
+        <div class="checkrow"><input type="checkbox" name="fixIssue" value="文字の誤字・文字化けを直す">文字の誤字・文字化け</div>
+        <div class="checkrow"><input type="checkbox" name="fixIssue" value="キャラクターの顔・目・耳・体型を、ほかのスタンプと同じにそろえる">顔・目・耳・体型のブレ</div>
+        <div class="checkrow"><input type="checkbox" name="fixIssue" value="ポーズと表情をセリフに合う自然なものへ直す">ポーズ・表情が不自然</div>
+        <div class="checkrow"><input type="checkbox" name="fixIssue" value="キャラクターや文字の切れをなくし、まわりに十分な余白を作る">絵や文字が切れている</div>
+        <div class="checkrow"><input type="checkbox" name="fixIssue" value="線の太さ・配色・塗り方を元の画像に合わせる">線・色・塗り方がちがう</div>
+        <div class="checkrow"><input type="checkbox" name="fixIssue" value="余計な文字・記号・透かし・ロゴ・マスの線を消す">余計な文字・記号・線がある</div>
+        <div class="checkrow"><input type="checkbox" name="fixIssue" value="となりのスタンプの一部が入らないように、このスタンプ1個だけにする">となりの絵が入っている</div>
+      </div>
+      <div class="field"><label>正しいセリフ</label><input id="fixDialogue"></div>
+      <div class="field"><label>ほかの希望（空でもOK）</label><textarea id="fixExtra" placeholder="例：表情は笑顔のまま、手だけおじぎに変える。ほかは変えない。"></textarea></div>
+      <div class="flow">
+        <div class="step"><div class="num">1</div><div class="txt">お願いの文はChatGPTに入り、この画像はコピーされます。入力欄を長押し→ペーストで画像を貼って送信</div><button class="btn gold" id="runFix">ChatGPTで直す</button></div>
+        <div class="step"><div class="num">2</div><div class="txt">直った画像を長押し→「コピー」→ ここに戻る</div><button class="btn" id="pasteFix">直した画像を貼り付け</button></div>
+      </div>
+      <div class="actions"><button class="btn secondary" id="copyFixPrompt">お願いの文だけコピー</button><span class="filebtn btn secondary">写真から選ぶ<input type="file" id="fixFile" accept="image/*"></span></div>
+      <div id="fixStatus" class="status"></div>
+    </div>
+
+    <div class="actions" style="margin-top:14px">
+      <button class="btn big" id="downloadZip">LINE申請用ZIPを保存</button>
+    </div>
+    <div id="imageStatus" class="status"></div>
+    <p class="small">ZIPの中身：01.png〜（370×320px）、main.png（240×240px）、tab.png（96×74px）。申請前に、文字・切れ・透明になりすぎていないかを目で見て確認してください。</p>
+  </div>
+</section>
+
+<!-- ===================== ⑤ タイトル・申請 ===================== -->
+<section id="seo" class="panel">
+  <div class="card">
+    <h2>⑤ 商品タイトル・説明文</h2>
+    <p class="sub">①②の内容とセリフをもとに、ChatGPTがタイトルと説明文を作ります。</p>
+    <div class="grid">
+      <div class="field"><label>軸キーワード</label><input id="seoKeyword" placeholder="例：敬語 うさぎ 仕事"></div>
+      <div class="field"><label>言語</label><select id="seoLang"><option value="ja">日本語</option><option value="en">英語</option></select></div>
+      <div class="field"><label>クリエイター名</label><input id="creatorName"></div>
+      <div class="field"><label>コピーライト</label><input id="copyright" placeholder="例：© Meu Studio"></div>
+    </div>
+    <div class="flow">
+      <div class="step"><div class="num">1</div><div class="txt">タイトルと説明文を作ってもらう</div><button class="btn gold" id="runSeo">ChatGPTで作る</button></div>
+      <div class="step"><div class="num">2</div><div class="txt">返事の枠の「コピー」→ ここに戻る</div><button class="btn" data-paste="seo">返事を貼り付け</button></div>
+    </div>
+    <div class="field" style="margin-top:12px"><label>タイトル</label><textarea id="seoTitle" style="min-height:60px"></textarea><small class="small">目安：40文字換算まで（日本語は1文字を2と数える場合があります）。</small></div>
+    <div class="field"><label>説明文</label><textarea id="seoDesc" style="min-height:110px"></textarea><small class="small">目安：160文字換算まで。最新の公式ルールも確認してください。</small></div>
+    <div class="field"><label>ほかの候補・選んだ理由</label><textarea id="seoCandidates" style="min-height:90px"></textarea></div>
+    <div class="actions">
+      <button class="btn secondary" id="checkSeo">文字数チェック</button>
+      <button class="btn secondary" id="copySeo">申請用にまとめてコピー</button>
+      <button class="btn secondary" id="generateSeo">ChatGPTなしで仮の文を入れる</button>
+    </div>
+    <div id="seoStatus" class="status"></div>
+    <details><summary>ChatGPTに送ったお願いの文を見る</summary><div class="output" id="seoPrompt">まだ作っていません。</div><div class="actions"><button class="btn secondary" data-copyout="seoPrompt" data-status="seoStatus">お願いの文をコピー</button></div></details>
+  </div>
+
+  <div class="card">
+    <h2>申請前チェックリスト</h2>
+    <p class="sub">チェックも自動で保存されます。</p>
+    <div id="checks">
+      <div class="checkrow"><input type="checkbox"><span>スタンプの内容がタイトル・説明文と合っている</span></div>
+      <div class="checkrow"><input type="checkbox"><span>ほかの人のキャラクター・作品・商標を勝手に使っていない</span></div>
+      <div class="checkrow"><input type="checkbox"><span>文字化け・誤字・重なり・見切れ・透明になりすぎがない</span></div>
+      <div class="checkrow"><input type="checkbox"><span>画像の数が選んだセット数と同じ</span></div>
+      <div class="checkrow"><input type="checkbox"><span>画像のサイズ・形式・容量・透明・余白を確認した</span></div>
+      <div class="checkrow"><input type="checkbox"><span>メイン画像・タブ画像を確認した</span></div>
+      <div class="checkrow"><input type="checkbox"><span>タイトル・説明文・コピーライト・翻訳を確認した</span></div>
+      <div class="checkrow"><input type="checkbox"><span>ZIPをスマホで開けることを確認した</span></div>
+    </div>
+    <div class="actions">
+      <button class="btn secondary" id="openGuideline">公式ガイドライン</button>
+      <button class="btn gold" id="openCreators">スタンプを申請する</button>
+      <button class="btn secondary" id="openStore">LINE STORE</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>データの保存・やり直し</h2>
+    <p class="sub">入力はこのブラウザに自動で保存されています。別の端末に移すときはJSONで保存してください（画像は入りません）。</p>
+    <div class="actions">
+      <button class="btn secondary" id="exportProject">企画データをJSON保存</button>
+      <span class="filebtn btn secondary">JSONを読み込む<input type="file" id="importProject" accept="application/json,.json"></span>
+      <button class="btn danger" id="resetAll">ぜんぶ消して最初から</button>
+    </div>
+    <div id="dataStatus" class="status"></div>
+  </div>
+</section>
+
+<div class="footer">STICKER STUDIO v2 · 公開前に公式規定・画像内容を最終確認してください。</div>
+</div>
+
+<!-- いつでも押せる「貼り付け」ボタン -->
+<div class="pastebar"><div class="in">
+  <button class="btn gold" id="pasteMain">📋 ChatGPTの返事を貼り付け</button>
+  <div class="expect" id="expectLabel"></div>
+</div></div>
+
+<!-- 貼り付けがうまくいかない時の窓 -->
+<div class="modal" id="pasteModal"><div class="box">
+  <b>ここに貼り付けてください</b>
+  <p class="small">下の枠を長押し →「ペースト」。画像なら「写真から選ぶ」でもOK。貼った瞬間に自動で入ります。</p>
+  <textarea id="pasteArea" placeholder="ここを長押し → ペースト"></textarea>
+  <div class="actions">
+    <span class="filebtn btn secondary">写真から選ぶ（何枚でも）<input type="file" id="pasteFile" accept="image/*" multiple></span>
+    <button class="btn secondary" id="closeModal">閉じる</button>
+  </div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+'use strict';
+/* =========================================================
+   1. 共通
+   ========================================================= */
+const $ = id => document.getElementById(id);
+const CHAT_URL = 'https://chatgpt.com/';
+const URL_LIMIT = 12000;            // これより長いお願いの文は、URLに入れずにコピーだけにする
+const RESEARCH_IN_PROMPT = 700;     // ②⑤のお願いの文に入れる調査まとめの最大文字数（長いとURLに入らないため）
+function shortResearch(){ const r=val('marketResult')||val('evidence'); return r.length>RESEARCH_IN_PROMPT ? r.slice(0,RESEARCH_IN_PROMPT)+'…（続きは、この会話の前の調査結果を使ってください）' : r; }
+const MARK = 'STICKER_STUDIO';      // 返事の見出し [[STICKER_STUDIO:種類]]
+const LS_FIELDS = 'stickerStudio_v2_fields';
+const LS_STATE = 'stickerStudio_v2_state';
+const OUT_W = 370, OUT_H = 320;     // LINEスタンプの大きさ
+const LAYOUTS = {8:[4,2],12:[4,3],16:[4,4],24:[4,6],40:[5,8]};
+
+function setStatus(id, msg, cls=''){ const el=$(id); if(!el) return; el.textContent=msg; el.className='status '+cls; }
+let toastTimer=null;
+function toast(msg, isErr=false){ const t=$('toast'); t.textContent=msg; t.className='toast show'+(isErr?' err':''); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.className='toast',4200); }
+function today(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+function val(id){ return ($(id)?.value||'').trim(); }
+function linesArr(){ return $('lines').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean); }
+function posesArr(){ return $('poses').value.split(/\r?\n/).map(s=>s.trim()); }
+function openLink(url){ window.open(url,'_blank','noopener'); }
+
+// タブ
+function showTab(name){
+  document.querySelectorAll('.nav button').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===name));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
+function markDone(tab){ const b=document.querySelector('.nav button[data-tab="'+tab+'"]'); if(b) b.classList.add('done'); }
+
+/* =========================================================
+   2. 自動保存（文字＝localStorage／画像＝IndexedDB）
+   ========================================================= */
+const FIELD_IDS=['market','researchDate','keywords','marketResult','evidence','competitors','sourceUrl','sDemand','sDiff','sUse','sSeo','sCost','character','species','audience','usecase','style','count','differentiator','hypothesis','concept','lines','poses','perSheet','refImage','whiteTransparent','addOutline','autoCut','seoKeyword','seoLang','creatorName','copyright','seoTitle','seoDesc','seoCandidates','fixExtra'];
+function lsGet(k,def){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function collectFields(){
+  const d={};
+  FIELD_IDS.forEach(id=>{ const el=$(id); if(!el) return; d[id]= el.type==='checkbox' ? el.checked : el.value; });
+  d._checks=[...$('checks').querySelectorAll('input')].map(x=>x.checked);
+  d._done=[...document.querySelectorAll('.nav button.done')].map(b=>b.dataset.tab);
+  return d;
+}
+function applyFields(d){
+  if(!d) return;
+  FIELD_IDS.forEach(id=>{ const el=$(id); if(!el||!(id in d)) return; if(el.type==='checkbox') el.checked=!!d[id]; else el.value=d[id]; });
+  if(Array.isArray(d._checks)) [...$('checks').querySelectorAll('input')].forEach((x,i)=>x.checked=!!d._checks[i]);
+  if(Array.isArray(d._done)) d._done.forEach(markDone);
+}
+let saveTimer=null;
+function saveFieldsSoon(){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>lsSet(LS_FIELDS,collectFields()),300); }
+
+// 画像以外の状態（どの画像が何枚目か・直した画像・メイン画像・待っている返事）
+let state={sheets:{}, fixes:[], mainIdx:0, expect:null};
+function saveState(){ lsSet(LS_STATE,state); }
+
+const IDB={
+  db:null,
+  open(){ return new Promise((res,rej)=>{ if(this.db) return res(this.db); const r=indexedDB.open('stickerStudio_v2',1); r.onupgradeneeded=()=>r.result.createObjectStore('blobs'); r.onsuccess=()=>{this.db=r.result;res(this.db)}; r.onerror=()=>rej(r.error); }); },
+  async tx(mode,fn){ const db=await this.open(); return new Promise((res,rej)=>{ const t=db.transaction('blobs',mode); const st=t.objectStore('blobs'); let out; const r=fn(st); if(r) r.onsuccess=()=>out=r.result; t.oncomplete=()=>res(out); t.onerror=()=>rej(t.error); }); },
+  put(k,v){ return this.tx('readwrite',st=>st.put(v,k)).catch(()=>{}); },
+  get(k){ return this.tx('readonly',st=>st.get(k)).catch(()=>null); },
+  del(k){ return this.tx('readwrite',st=>st.delete(k)).catch(()=>{}); },
+  clear(){ return this.tx('readwrite',st=>st.clear()).catch(()=>{}); }
+};
+
+/* =========================================================
+   3. ChatGPTとの行き来
+   ========================================================= */
+function copyTextNow(text){
+  // ボタンを押した瞬間に呼ぶこと（スマホは押した瞬間しかコピーできない）
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text).then(()=>true).catch(()=>fallbackCopy(text));
+  }
+  return Promise.resolve(fallbackCopy(text));
+}
+function fallbackCopy(text){
+  const ta=document.createElement('textarea'); ta.value=text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0,text.length);
+  let ok=false; try{ ok=document.execCommand('copy'); }catch(e){}
+  ta.remove(); return ok;
+}
+/**
+ * ChatGPTを開く。お願いの文は ?q= で入力欄に入れる＋コピーもしておく。
+ * imagePromise を渡すと、文はURLで入れて、画像をコピーする（入力欄に貼るだけ）。
+ */
+function openChat(prompt, statusId, expect, imagePromise=null){
+  if(!prompt || !prompt.trim()){ setStatus(statusId,'先にお願いの文を作れませんでした。欄を確認してください。','warn'); return; }
+  const enc=encodeURIComponent(prompt);
+  const inUrl=enc.length<=URL_LIMIT;
+  const url=inUrl ? CHAT_URL+'?q='+enc : CHAT_URL;
+  let copyP, kind;
+  if(imagePromise && inUrl && navigator.clipboard && window.ClipboardItem){
+    kind='image';
+    copyP=navigator.clipboard.write([new ClipboardItem({'image/png':imagePromise})]).then(()=>true).catch(()=>false);
+  }else{
+    kind='text';
+    copyP=copyTextNow(prompt);
+  }
+  openLink(url);
+  setExpect(expect);
+  copyP.then(ok=>{
+    let msg;
+    if(kind==='image'){
+      msg = ok ? 'ChatGPTを開きました。お願いの文は入力済みです。\n入力欄を長押し →「ペースト」で画像を貼ってから送信してください。\n（文が入っていなかったら「お願いの文だけコピー」を使ってください）'
+               : 'ChatGPTを開きました。お願いの文は入力済みです。画像のコピーができなかったので、画像は「写真から選ぶ」などで添付してください。';
+    }else{
+      msg = (inUrl ? 'ChatGPTを開きました。お願いの文は入力済みです。' : 'お願いの文が長いので、URLには入れていません。')
+          + (ok ? '\n入っていなかったら、入力欄を長押し →「ペースト」で貼って送信してください（コピー済み）。' : '\nコピーできませんでした。下の「お願いの文を見る」から長押しでコピーしてください。');
+    }
+    msg+='\n返事が来たら、枠の「コピー」→ ここに戻って「📋 返事を貼り付け」。';
+    setStatus(statusId,msg,ok?'ok':'warn');
+  });
+}
+// 返事の形（ChatGPTにこの形で出してもらう）
+function replyFormat(kind, keys){
+  return '\n\n【返事の形（大事）】\n説明は自由に書いてOKです。そのあと最後に必ず、次の形を「1つのコードブロック（```で囲む）」で出してください。ツールに貼り付けて自動で入力するので、[[ ]] の見出しは1文字も変えずにそのまま書き、見出しの下に中身だけを書いてください。中身がない項目は「なし」と書いてください。\n'
+    + '```\n[[' + MARK + ':' + kind + ']]\n'
+    + keys.map(([k,desc])=>'[['+k+']]\n'+desc).join('\n')
+    + '\n```';
+}
+
+/* =========================================================
+   4. 返事の読み取り
+   ========================================================= */
+function parseReply(text){
+  if(!text) return null;
+  let t=String(text).replace(/\r/g,'').replace(/［/g,'[').replace(/］/g,']').replace(/〚/g,'[[').replace(/〛/g,']]');
+  const m=t.match(/\[\[\s*STICKER[_ ]?STUDIO\s*[:：]\s*([a-zA-Z]+)\s*\]\]/i);
+  if(!m) return null;
+  let body=t.slice(m.index+m[0].length).replace(/^\s*```.*$/gm,'');
+  const parts=body.split(/^\s*\[\[\s*([a-zA-Z_]+)\s*\]\]\s*/m);
+  const f={};
+  for(let i=1;i<parts.length;i+=2){
+    let v=(parts[i+1]||'').trim();
+    if(/^(なし|無し|none|n\/a)$/i.test(v)) v='';
+    f[parts[i].toLowerCase()]=v;
+  }
+  return {kind:m[1].toLowerCase(), f};
+}
+function cleanLineItems(text){
+  const lines=[], poses=[];
+  String(text||'').split(/\n/).forEach(raw=>{
+    let s=raw.trim(); if(!s) return;
+    s=s.replace(/^(\d+\s*[.．、)）:：]|[-・*•●])\s*/,'').trim();
+    let [a,...rest]=s.split(/[｜|]/);
+    a=(a||'').trim().replace(/^[「『"]+|[」』"]+$/g,'').trim();
+    if(!a) return;
+    lines.push(a); poses.push(rest.join(' / ').trim());
+  });
+  return {lines,poses};
+}
+function setIf(id,v){ if(v!==undefined && v!==null && String(v).trim()!==''){ $(id).value=String(v).trim(); return true; } return false; }
+
+function applyResearch(f){
+  setIf('marketResult',f.summary); setIf('evidence',f.evidence); setIf('competitors',f.competitors); setIf('sourceUrl',f.sources);
+  if(f.keywords){ setIf('keywords',f.keywords); if(!val('seoKeyword')) setIf('seoKeyword',f.keywords); }
+  ['character','species','audience','usecase','style','differentiator','hypothesis'].forEach(k=>setIf(k,f[k]));
+  if(f.score){
+    const map=[['sDemand',/根拠\D*(\d+)/],['sDiff',/差別化\D*(\d+)/],['sUse',/使いやすさ\D*(\d+)/],['sSeo',/検索\D*(\d+)/],['sCost',/(?:実現性|作りやすさ)\D*(\d+)/]];
+    map.forEach(([id,re])=>{ const m=f.score.match(re); if(m) $(id).value=Math.min(Number(m[1]),Number($(id).max)); });
+    score();
+  }
+  markDone('research');
+  setStatus('researchStatus','調査結果を入れました。②の欄にも、いちばん良い案を入れてあります。','ok');
+  return '①の調査結果を入れました → ②へ進みます';
+}
+function applyPlan(f){
+  ['character','species','audience','usecase','style','differentiator','hypothesis'].forEach(k=>setIf(k,f[k]));
+  const concept=[f.concept,f.notes?('【注意】\n'+f.notes):''].filter(Boolean).join('\n\n');
+  setIf('concept',concept);
+  if(f.lines){
+    const {lines,poses}=cleanLineItems(f.lines);
+    if(lines.length){ $('lines').value=lines.join('\n'); $('poses').value=poses.join('\n'); }
+  }
+  checkLines();
+  markDone('plan');
+  renderBatches();
+  return '②の企画とセリフ（'+linesArr().length+'個）を入れました → ③へ進みます';
+}
+function applySeo(f){
+  setIf('seoKeyword',f.keyword); setIf('seoTitle',f.title); setIf('seoDesc',f.description);
+  setIf('seoCandidates',[f.candidates,f.reason?('【理由・弱点】\n'+f.reason):''].filter(Boolean).join('\n\n'));
+  checkSeo(); markDone('seo');
+  return '⑤のタイトルと説明文を入れました';
+}
+function handleText(text){
+  const p=parseReply(text);
+  if(!p){
+    // 形が見つからない：待っている返事に合わせて、そのまま入れる
+    const ex=state.expect?.type;
+    if(ex==='research'){ $('marketResult').value=text.trim(); saveFieldsSoon(); toast('返事の形（[[STICKER_STUDIO]]）が見つからなかったので、①のまとめ欄にそのまま入れました。\n次からは返事の最後の枠の「コピー」を押してね。'); showTab('research'); return; }
+    if(ex==='plan'){ const {lines,poses}=cleanLineItems(text); $('concept').value=text.trim(); if(lines.length>=4&&lines.length<=60){ $('lines').value=lines.join('\n'); $('poses').value=poses.join('\n'); } saveFieldsSoon(); toast('返事の形が見つからなかったので、②にそのまま入れました。セリフ欄を確認してね。'); showTab('plan'); checkLines(); return; }
+    if(ex==='seo'){ $('seoCandidates').value=text.trim(); saveFieldsSoon(); toast('返事の形が見つからなかったので、⑤の候補欄にそのまま入れました。'); showTab('seo'); return; }
+    toast('ChatGPTの返事の形が見つかりませんでした。\n返事の最後の枠（コードブロック）の「コピー」を押してから貼り付けてね。',true);
+    return;
+  }
+  let msg, next;
+  if(p.kind==='research'){ msg=applyResearch(p.f); next='plan'; }
+  else if(p.kind==='plan'){ msg=applyPlan(p.f); next='prompt'; }
+  else if(p.kind==='seo'){ msg=applySeo(p.f); next='seo'; }
+  else { toast('知らない種類の返事でした：'+p.kind,true); return; }
+  setExpect(null);
+  saveFieldsSoon();
+  toast('✅ '+msg);
+  showTab(next);
+}
+
+/* =========================================================
+   5. ①②⑤ お願いの文
+   ========================================================= */
+function buildResearchPrompt(){
+  return 'あなたはLINEスタンプ市場のリサーチャーです。必ずWeb検索を使って、最新の公開情報を調べてください。\n'
+  +'調査日：'+(val('researchDate')||today())+'\n'
+  +'市場：'+val('market')+'\n'
+  +'調べたいキーワード：'+(val('keywords')||'（未入力：今売れているLINEスタンプのジャンルから調べてください）')+'\n'
+  +'今の案（あれば参考に）：キャラ='+val('character')+'、使う人='+val('audience')+'、場面='+val('usecase')+'\n'
+  +(val('hypothesis')?'メモ：'+val('hypothesis')+'\n':'')
+  +'\nやること：\n'
+  +'1. LINE STOREの実在商品・公式ランキング・商品ページを優先して調べる。\n'
+  +'2. 競合を最大10件、商品名・URL・ページで確認できた特徴で比べる。確認できないことは「確認できず」と書く。\n'
+  +'3. 関連する検索語、使われる場面、競合が多いところ、すき間（差別化できるところ）をまとめる。\n'
+  +'4. 企画案を3つ作り、需要の手がかり・競合・差別化・作りやすさ・根拠の強さで比べて、いちばん良い案を1つ選ぶ。\n'
+  +'5. 事実と推測を分ける。販売数・順位・商品・URLを作り出さない。調べられなかったことは正直に書く。'
+  +replyFormat('research',[
+    ['summary','調査のまとめ（事実と推測を分けて。いちばん良い案とその理由も）'],
+    ['evidence','確認できた事実（商品名・URL・特徴を1行に1件）'],
+    ['competitors','競合が多いところ／足りない用途'],
+    ['sources','参照したURL（1行に1つ）'],
+    ['keywords','狙う検索キーワード（スペース区切り）'],
+    ['character','いちばん良い案のキャラクター名'],
+    ['species','キャラクターの種類'],
+    ['audience','買う人・使う人'],
+    ['usecase','使う場面'],
+    ['style','画風'],
+    ['differentiator','差別化ポイント'],
+    ['hypothesis','企画の仮説（根拠と仮説を分けて）'],
+    ['score','根拠:0〜30の数字\n差別化:0〜25の数字\n使いやすさ:0〜20の数字\n検索:0〜15の数字\n実現性:0〜10の数字']
+  ]);
+}
+function buildPlanPrompt(){
+  const n=Number(val('count'));
+  return 'あなたはLINEスタンプの商品企画の担当です。市場調査の結果を根拠に、売れる企画を作ってください。\n'
+  +'キャラクター：'+val('character')+'\n種類：'+val('species')+'\n買う人：'+val('audience')+'\n使う場面：'+val('usecase')+'\n画風：'+val('style')+'\nスタンプの数：'+n+'個\n差別化：'+val('differentiator')+'\n'
+  +'市場調査の結果：\n'+(shortResearch()||'未入力。需要を決めつけず、仮説として書いてください。')+'\n\n'
+  +'きまり：\n'
+  +'・セリフはちょうど'+n+'個。重ならない。短く（できれば10文字くらいまで）、実際のトークで使いやすい言葉。\n'
+  +'・あいさつ・返事・お礼・おわび・気持ちなど、使う場面がかたよらないようにする。\n'
+  +'・セリフごとに、合う表情・ポーズを短く書く。\n'
+  +'・根拠のない売上予想はしない。最後に数を数えて'+n+'個か確かめる。'
+  +replyFormat('plan',[
+    ['concept','企画のまとめ（コンセプト・根拠・差別化）'],
+    ['character','キャラクター名'],['species','種類'],['audience','買う人・使う人'],['usecase','使う場面'],['style','画風'],
+    ['differentiator','差別化ポイント'],['hypothesis','企画の仮説'],
+    ['lines','セリフ｜表情・ポーズ\n（1行に1個、ちょうど'+n+'行。番号はつけない）'],
+    ['notes','著作権・審査で気をつけること']
+  ]);
+}
+function buildSeoPrompt(){
+  return 'あなたはLINEスタンプの販売ページの編集者です。下の商品情報から、検索で見つけてもらいやすく、内容と合ったタイトルと説明文を作ってください。'+(val('seoLang')==='en'?'英語で作ってください。':'日本語で作ってください。')+'\n'
+  +'軸キーワード：'+val('seoKeyword')+'\nキャラクター：'+val('character')+'\n使う人：'+val('audience')+'\n場面：'+val('usecase')+'\n差別化：'+val('differentiator')+'\n'
+  +'セリフ：'+linesArr().join('、')+'\n'
+  +'市場調査：'+(shortResearch()||'なし')+'\n\n'
+  +'きまり：タイトルは40文字換算以内、説明文は160文字換算以内（日本語は1文字を2と数える場合があるので、両方の数え方で文字数を書く）。検索語をつめこみすぎない。実際のスタンプの内容と合わせる。「人気No.1」など根拠のない言葉は使わない。'
+  +replyFormat('seo',[
+    ['keyword','軸キーワード'],
+    ['title','いちばん良いタイトル（1つだけ）'],
+    ['description','いちばん良い説明文（1つだけ）'],
+    ['candidates','ほかのタイトル候補・説明文候補（文字数つき）'],
+    ['reason','選んだ理由と弱点']
+  ]);
+}
+$('runResearch').onclick=()=>{ const p=buildResearchPrompt(); $('researchPrompt').textContent=p; openChat(p,'researchStatus',{type:'research'}); };
+$('runPlan').onclick=()=>{ const p=buildPlanPrompt(); $('planPrompt').textContent=p; openChat(p,'planStatus',{type:'plan'}); };
+$('runSeo').onclick=()=>{ const p=buildSeoPrompt(); $('seoPrompt').textContent=p; openChat(p,'seoStatus',{type:'seo'}); };
+document.querySelectorAll('[data-copyout]').forEach(b=>b.addEventListener('click',()=>{ copyTextNow($(b.dataset.copyout).textContent).then(ok=>setStatus(b.dataset.status,ok?'コピーしました。':'コピーできませんでした。長押しでコピーしてください。',ok?'ok':'warn')); }));
+
+// スコア
+function score(){ const n=['sDemand','sDiff','sUse','sSeo','sCost'].reduce((a,id)=>a+Math.max(0,Math.min(Number($(id).value)||0,Number($(id).max))),0); $('totalScore').textContent=n+' / 100'; $('scoreBar').style.width=n+'%'; }
+['sDemand','sDiff','sUse','sSeo','sCost'].forEach(id=>$(id).addEventListener('input',score));
+
+// セリフ
+const phraseSets=['おはようございます','お疲れさまです','ありがとうございます','承知しました','確認します','お願いします','少々お待ちください','すみません','大丈夫です','助かります','よろしくお願いします','かしこまりました','了解しました','お待たせしました','失礼します','お先に失礼します','お疲れさまでした','申し訳ありません','今向かっています','あとで連絡します','問題ありません','お願いいたします','助かりました','大変恐縮です','お世話になっております','こんにちは','こんばんは','おやすみなさい','うれしいです','いいですね','やったー！','少し遅れます','到着しました','今確認しています','後ほど返信します','承りました','ご確認お願いします','よろしくお願いいたします','また明日','おめでとうございます'];
+$('generateLines').onclick=()=>{ const n=Number(val('count')); $('lines').value=phraseSets.slice(0,n).join('\n'); $('poses').value=''; checkLines(); renderBatches(); saveFieldsSoon(); };
+function checkLines(){
+  const raw=$('lines').value.split(/\r?\n/), a=raw.map(s=>s.trim()).filter(Boolean), dups=[...new Set(a.filter((x,i)=>a.indexOf(x)!==i))], n=Number(val('count'));
+  const bad=dups.length||a.length!==n;
+  setStatus('lineStatus','セリフ：'+a.length+'個（必要な数：'+n+'個）／重なり：'+dups.length+'件'+(dups.length?'（'+dups.join('、')+'）':'')+(a.length!==n?'\n⚠ 数が合っていません。セリフを足すか消すか、「スタンプの数」を変えてください。':''),bad?'warn':'ok');
+}
+$('checkLines').onclick=checkLines;
+$('copyLines').onclick=()=>copyTextNow($('lines').value).then(ok=>setStatus('lineStatus',ok?'コピーしました。':'コピーできませんでした。',ok?'ok':'warn'));
+
+/* =========================================================
+   6. ③ 画像を作る（何枚かに分けて作る）
+   ========================================================= */
+const sheetImgs={};   // idx -> HTMLImageElement
+function batchDefs(){
+  const per=Number(val('perSheet'))||8, [bc,br]=LAYOUTS[per]||[4,2];
+  const all=linesArr().slice(0,Number(val('count'))), poses=posesArr();
+  const out=[];
+  for(let s=0,i=0;s<all.length;s+=per,i++){
+    const items=all.slice(s,s+per);
+    const cols=Math.min(bc,items.length), rows=Math.ceil(items.length/cols);
+    out.push({idx:i,start:s,count:items.length,cols,rows,items,poses:poses.slice(s,s+per)});
+  }
+  return out;
+}
+function shapeOf(cols,rows){ const r=(cols*1.16)/rows; return r>1.25?'横長（3:2）':(r<0.8?'縦長（2:3）':'正方形（1:1）'); }
+function buildSheetPrompt(b,total,useRef){
+  const lines=b.items.map((x,i)=>(b.start+i+1)+'. 「'+x+'」'+(b.poses[i]?' — '+b.poses[i]:' — セリフに合う表情とポーズ')).join('\n');
+  return '画像を1枚生成してください。LINEスタンプの一覧画像（'+(b.idx+1)+'枚目／全'+total+'枚）です。\n'
+  +(b.idx>0||useRef?'\n【前と同じキャラクター】'+(useRef?'添付した見本画像':'この会話で前に作った画像')+'とまったく同じキャラクター・画風・色・線の太さで描いてください。\n':'')
+  +'\n【キャラクター】\n名前：'+val('character')+'\n種類：'+val('species')+'\n画風：'+val('style')+'\n'
+  +'\n【並べ方】\n横'+b.cols+'個×縦'+b.rows+'段＝'+b.count+'個。画像の形：'+shapeOf(b.cols,b.rows)+'。\n'
+  +'1マスにスタンプ1個。マスとマスの間を広くあけて、絵や文字がとなりとくっつかないようにしてください。マスの線・枠線・番号は描かないでください。背景は真っ白の単色（模様・影・グラデーションなし）。\n'
+  +'\n【スタンプ（左上から右へ、次の段へ）】\n'+lines+'\n'
+  +'\n【絶対ルール】\n'
+  +'1. セリフの文字は1文字も変えず、足さず、省かない。太めで読みやすい文字にする。\n'
+  +'2. セリフ以外の文字・ロゴ・番号・透かしを入れない。\n'
+  +'3. 全部のマスで、顔・目・耳・体型・配色・線の太さを同じにする。\n'
+  +'4. 絵と文字を画像の端やマスの端で切らない。まわりに余白をとる。\n'
+  +'5. キャラクターの外側の線は濃い色ではっきり描く（白いふちどりは付けない。あとでツールで付けます）。\n'
+  +'6. 説明だけで終わらず、必ず画像を出す。';
+}
+function renderBatches(){
+  const list=$('batchList'), defs=batchDefs(), total=defs.length;
+  list.innerHTML='';
+  if(!total){ list.innerHTML='<div class="notice">②でセリフを入れると、ここに「1枚目」「2枚目」…のボタンが出ます。</div>'; updateExpectLabel(); return; }
+  defs.forEach(b=>{
+    const meta=state.sheets[b.idx], has=!!(meta&&sheetImgs[b.idx]);
+    const ex=state.expect&&state.expect.type==='sheet'&&state.expect.idx===b.idx;
+    const div=document.createElement('div'); div.className='batch'+(has?' has':'')+(ex?' expect':'');
+    div.innerHTML='<div class="batch-head"><b>'+(b.idx+1)+'枚目（'+(b.start+1)+'〜'+(b.start+b.count)+'）</b><span class="small">'+(has?'✅ 画像あり':'まだ')+'</span></div>'
+      +'<div class="batch-lines"></div>'
+      +'<div class="actions"></div>'
+      +'<div class="batch-grid">ChatGPTの並び：横<input type="number" min="1" max="10" class="bc">個 × 縦<input type="number" min="1" max="10" class="br">段 <span class="small">（ちがう並びで出てきたら直す）</span></div>';
+    div.querySelector('.batch-lines').textContent=b.items.join('／');
+    const bcI=div.querySelector('.bc'), brI=div.querySelector('.br');
+    bcI.value=meta?.cols||b.cols; brI.value=meta?.rows||b.rows;
+    const changeGrid=()=>{ if(state.sheets[b.idx]){ state.sheets[b.idx].cols=Math.max(1,Number(bcI.value)||b.cols); state.sheets[b.idx].rows=Math.max(1,Number(brI.value)||b.rows); saveState(); rebuildSlices(); } };
+    bcI.addEventListener('change',changeGrid); brI.addEventListener('change',changeGrid);
+    const act=div.querySelector('.actions');
+    const go=document.createElement('button'); go.className='btn gold'; go.textContent='ChatGPTで'+(b.idx+1)+'枚目を作る';
+    go.onclick=()=>{
+      const useRef=$('refImage').checked && sheetImgs[0] && b.idx>0;
+      const p=buildSheetPrompt(b,total,useRef);
+      openChat(p,'promptStatus',{type:'sheet',idx:b.idx}, useRef?pngBlobOf(sheetImgs[0],'#fff'):null);
+      renderBatches();
+    };
+    const paste=document.createElement('button'); paste.className='btn'; paste.textContent='画像を貼り付け';
+    paste.onclick=()=>{ setExpect({type:'sheet',idx:b.idx}); smartPaste(); };
+    const file=document.createElement('span'); file.className='filebtn btn secondary'; file.innerHTML='写真から選ぶ<input type="file" accept="image/*">';
+    file.querySelector('input').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) setSheet(b.idx,f); e.target.value=''; });
+    act.append(go,paste,file);
+    if(has){
+      const del=document.createElement('button'); del.className='btn danger'; del.textContent='この画像を消す';
+      del.onclick=async()=>{ if(!confirm((b.idx+1)+'枚目の画像を消しますか？')) return; delete state.sheets[b.idx]; delete sheetImgs[b.idx]; await IDB.del('sheet_'+b.idx); saveState(); renderBatches(); rebuildSlices(); };
+      act.append(del);
+      const im=document.createElement('img'); im.className='thumb'; im.src=sheetImgs[b.idx].src; div.append(im);
+    }
+    list.append(div);
+  });
+  updateExpectLabel();
+}
+async function setSheet(idx, blob){
+  const def=batchDefs()[idx];
+  if(!def){ toast('その枚数のセリフがありません。②のセリフを確認してね。',true); return; }
+  let img;
+  try{ img=await loadImg(blob); }catch(e){ toast('画像を読み込めませんでした。PNG・JPEG・WebPを使ってください。',true); return; }
+  sheetImgs[idx]=img;
+  state.sheets[idx]={start:def.start,count:def.count,cols:def.cols,rows:def.rows};
+  await IDB.put('sheet_'+idx,blob);
+  // 次に待つ画像
+  const defs=batchDefs(), nextEmpty=defs.find(d=>!sheetImgs[d.idx]);
+  setExpect(nextEmpty?{type:'sheet',idx:nextEmpty.idx}:null);
+  saveState(); renderBatches(); rebuildSlices();
+  const done=Object.keys(sheetImgs).length;
+  markDone('prompt');
+  toast('✅ '+(idx+1)+'枚目を入れました（'+done+'／'+defs.length+'枚）'+(nextEmpty?'\n次は'+(nextEmpty.idx+1)+'枚目です。':'\n全部そろいました！ ④で確認してZIPにできます。'));
+  if(!nextEmpty) markDone('files');
+}
+
+/* =========================================================
+   7. ④ 仕上げ（切り分け・透明化・ふちどり・ZIP）
+   ========================================================= */
+function loadImg(blob){ return new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=URL.createObjectURL(blob); }); }
+function canvasBlob(c){ return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(Error('PNGにできませんでした')),'image/png')); }
+function pngBlobOf(src,bg){
+  const c=document.createElement('canvas'); c.width=src.naturalWidth||src.width; c.height=src.naturalHeight||src.height;
+  const x=c.getContext('2d'); if(bg){ x.fillStyle=bg; x.fillRect(0,0,c.width,c.height); } x.drawImage(src,0,0);
+  return canvasBlob(c);
+}
+function isInk(d,i){ return d[i+3]>20 && (d[i]<232||d[i+1]<232||d[i+2]<232); }
+// 絵のすき間を探して、切る位置を決める
+function findCuts(img,cols,rows){
+  const W=img.naturalWidth, H=img.naturalHeight;
+  const even=(n,len)=>Array.from({length:n+1},(_,i)=>len*i/n);
+  if(!$('autoCut').checked) return {xs:even(cols,W), ys:even(rows,H)};
+  const s=Math.min(1,700/Math.max(W,H)), w=Math.max(1,Math.round(W*s)), h=Math.max(1,Math.round(H*s));
+  const c=document.createElement('canvas'); c.width=w; c.height=h; const x=c.getContext('2d'); x.drawImage(img,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data, colInk=new Float32Array(w), rowInk=new Float32Array(h);
+  for(let y=0;y<h;y++) for(let xx=0;xx<w;xx++){ if(isInk(d,(y*w+xx)*4)){ colInk[xx]++; rowInk[y]++; } }
+  const pick=(prof,len,n)=>{
+    const cuts=[0], step=len/n, r=Math.max(2,Math.floor(step*0.35));
+    for(let i=1;i<n;i++){
+      const ideal=Math.round(step*i); let best=ideal, bestV=Infinity;
+      for(let p=Math.max(1,ideal-r);p<=Math.min(len-2,ideal+r);p++){
+        let v=0; for(let k=-2;k<=2;k++){ const q=p+k; if(q>=0&&q<len) v+=prof[q]; }
+        const sc=v*1000+Math.abs(p-ideal);
+        if(sc<bestV){ bestV=sc; best=p; }
+      }
+      cuts.push(best);
+    }
+    cuts.push(len); return cuts;
+  };
+  return {xs:pick(colInk,w,cols).map(v=>v/s), ys:pick(rowInk,h,rows).map(v=>v/s)};
+}
+// 外側につながる白を透明にする
+function removeEdgeWhite(canvas){
+  const ctx=canvas.getContext('2d'), w=canvas.width, h=canvas.height, id=ctx.getImageData(0,0,w,h), d=id.data, seen=new Uint8Array(w*h), q=new Int32Array(w*h);
+  let head=0, tail=0;
+  const nearWhite=i=>d[i+3]<20 || (d[i]>236&&d[i+1]>236&&d[i+2]>236&&Math.max(d[i],d[i+1],d[i+2])-Math.min(d[i],d[i+1],d[i+2])<18);
+  const add=(x,y)=>{ const k=y*w+x; if(!seen[k]&&nearWhite(k*4)){ seen[k]=1; q[tail++]=k; } };
+  for(let x=0;x<w;x++){ add(x,0); if(h>1) add(x,h-1); }
+  for(let y=1;y<h-1;y++){ add(0,y); if(w>1) add(w-1,y); }
+  while(head<tail){ const k=q[head++], x=k%w, y=(k/w)|0; d[k*4+3]=0; if(x>0)add(x-1,y); if(x+1<w)add(x+1,y); if(y>0)add(x,y-1); if(y+1<h)add(x,y+1); }
+  // 境目のうすい白をなめらかにする
+  for(let k=0;k<w*h;k++){ const i=k*4; if(d[i+3]>0 && !seen[k]){ const x=k%w, y=(k/w)|0; if((x>0&&seen[k-1])||(x+1<w&&seen[k+1])||(y>0&&seen[k-w])||(y+1<h&&seen[k+w])){ const wh=Math.min(d[i],d[i+1],d[i+2]); if(wh>200) d[i+3]=Math.round(d[i+3]*(255-wh)/55); } } }
+  ctx.putImageData(id,0,0);
+}
+// 1マス分を取り出して、絵のある所だけに切りつめる
+function extractContent(img,sx,sy,sw,sh){
+  const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(sw)); c.height=Math.max(1,Math.round(sh));
+  const x=c.getContext('2d'); x.drawImage(img,sx,sy,sw,sh,0,0,c.width,c.height);
+  const transparent=$('whiteTransparent').checked;
+  if(transparent) removeEdgeWhite(c);
+  const d=x.getImageData(0,0,c.width,c.height).data;
+  let x0=c.width, y0=c.height, x1=-1, y1=-1;
+  for(let y=0;y<c.height;y++) for(let xx=0;xx<c.width;xx++){
+    const i=(y*c.width+xx)*4, on= transparent ? d[i+3]>16 : isInk(d,i);
+    if(on){ if(xx<x0)x0=xx; if(xx>x1)x1=xx; if(y<y0)y0=y; if(y>y1)y1=y; }
+  }
+  if(x1<0) return null;
+  const pad=transparent?0:4; x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(c.width-1,x1+pad); y1=Math.min(c.height-1,y1+pad);
+  const o=document.createElement('canvas'); o.width=x1-x0+1; o.height=y1-y0+1;
+  o.getContext('2d').drawImage(c,x0,y0,o.width,o.height,0,0,o.width,o.height);
+  return o;
+}
+// 決まった大きさにおさめる（余白・白いふちどり）
+function renderTo(content,W,H,{pad=10}={}){
+  const out=document.createElement('canvas'); out.width=W; out.height=H;
+  const ctx=out.getContext('2d');
+  if(!content) return out;
+  const outline=($('addOutline').checked&&$('whiteTransparent').checked) ? Math.max(1,Math.round(Math.min(W/OUT_W,H/OUT_H)*5)) : 0;
+  const sc=Math.min((W-2*pad-2*outline)/content.width,(H-2*pad-2*outline)/content.height);
+  const dw=Math.max(1,content.width*sc), dh=Math.max(1,content.height*sc), dx=(W-dw)/2, dy=(H-dh)/2;
+  ctx.imageSmoothingQuality='high';
+  if(outline>0){
+    const t=document.createElement('canvas'); t.width=W; t.height=H; const tx=t.getContext('2d');
+    for(let a=0;a<24;a++){ const r=a*Math.PI*2/24; tx.drawImage(content,dx+Math.cos(r)*outline,dy+Math.sin(r)*outline,dw,dh); }
+    tx.globalCompositeOperation='source-in'; tx.fillStyle='#fff'; tx.fillRect(0,0,W,H);
+    ctx.drawImage(t,0,0);
+  }
+  ctx.drawImage(content,dx,dy,dw,dh);
+  return out;
+}
+let slices=[];         // {n, content, sheet, fixed}
+const fixImgs={};      // n -> HTMLImageElement
+let selIdx=-1;
+function rebuildSlices(){
+  slices=[];
+  const metas=Object.entries(state.sheets).map(([k,m])=>({idx:Number(k),...m})).filter(m=>sheetImgs[m.idx]).sort((a,b)=>a.start-b.start);
+  metas.forEach(m=>{
+    const img=sheetImgs[m.idx], {xs,ys}=findCuts(img,m.cols,m.rows);
+    let k=0;
+    for(let r=0;r<m.rows;r++) for(let c=0;c<m.cols;c++){
+      if(k>=m.count) break;
+      const n=m.start+k; k++;
+      let content, fixed=false;
+      if(fixImgs[n]){ const f=fixImgs[n]; content=extractContent(f,0,0,f.naturalWidth,f.naturalHeight); fixed=true; }
+      else content=extractContent(img,xs[c],ys[r],xs[c+1]-xs[c],ys[r+1]-ys[r]);
+      slices.push({n,content,sheet:m.idx,fixed});
+    }
+  });
+  slices.sort((a,b)=>a.n-b.n);
+  drawPreview();
+}
+function drawPreview(){
+  const g=$('previewGrid'); g.innerHTML='';
+  const lines=linesArr(), need=Number(val('count'));
+  slices.forEach((s,i)=>{
+    const d=document.createElement('div'); d.className='sticker'+(i===selIdx?' sel':'');
+    const cv=renderTo(s.content,OUT_W,OUT_H);
+    const cap=document.createElement('div'); cap.className='cap'; cap.textContent=String(i+1).padStart(2,'0')+' '+(lines[s.n]||'');
+    d.append(cv,cap);
+    if(i===state.mainIdx){ const b=document.createElement('span'); b.className='badge'; b.textContent='メイン'; d.append(b); }
+    if(s.fixed){ const b=document.createElement('span'); b.className='badge fix'; b.textContent='直した'; d.append(b); }
+    if(!s.content){ cap.textContent+=' ⚠ 空っぽ'; }
+    d.onclick=()=>selectSlice(i);
+    g.append(d);
+  });
+  const empty=slices.filter(s=>!s.content).length;
+  setStatus('sliceSummary', slices.length ? ('スタンプ '+slices.length+'個（必要な数：'+need+'個）'+(slices.length!==need?' ⚠ 数がちがいます。③の画像がそろっているか確認してね。':'')+(empty?'\n⚠ 空っぽのマスが'+empty+'個あります。③の「ChatGPTの並び」を直すか、自動調整をオフにしてみてね。':'')) : '③で画像を入れると、ここに並びます。', slices.length&&slices.length===need&&!empty?'ok':'warn');
+  if(selIdx>=slices.length) selectSlice(-1); else if(selIdx>=0) selectSlice(selIdx,true);
+}
+function selectSlice(i,keep){
+  if(!keep && i===selIdx) i=-1;
+  selIdx=i;
+  document.querySelectorAll('#previewGrid .sticker').forEach((el,k)=>el.classList.toggle('sel',k===i));
+  const box=$('selBox');
+  if(i<0||!slices[i]){ box.style.display='none'; return; }
+  const s=slices[i], line=linesArr()[s.n]||'';
+  box.style.display='block';
+  $('selTitle').textContent='選んだスタンプ：'+String(i+1).padStart(2,'0')+'「'+line+'」';
+  if(!keep) $('fixDialogue').value=line;
+  $('undoFix').style.display=s.fixed?'inline-block':'none';
+}
+$('setMain').onclick=()=>{ if(selIdx<0) return; state.mainIdx=selIdx; saveState(); drawPreview(); toast('✅ '+String(selIdx+1).padStart(2,'0')+'をメイン・タブ画像にしました'); };
+$('undoFix').onclick=async()=>{ const s=slices[selIdx]; if(!s) return; delete fixImgs[s.n]; state.fixes=state.fixes.filter(n=>n!==s.n); await IDB.del('fix_'+s.n); saveState(); rebuildSlices(); toast('元の画像に戻しました'); };
+['whiteTransparent','addOutline','autoCut'].forEach(id=>$(id).addEventListener('change',rebuildSlices));
+
+// 直す
+function buildFixPrompt(){
+  const chosen=[...document.querySelectorAll('input[name="fixIssue"]:checked')].map(x=>x.value);
+  const line=val('fixDialogue'), extra=val('fixExtra');
+  return '添付したLINEスタンプ画像を直して、画像を1枚生成してください。ゼロから別のキャラクターに作りかえず、添付画像のキャラクターらしさをそのまま残してください。\n\n'
+  +'【直すところ】\n'+(chosen.length?chosen.map((x,i)=>(i+1)+'. '+x).join('\n'):'画像をよく見て、明らかにおかしいところだけ直す。')+'\n\n'
+  +'【セリフ】\n'+(line?'「'+line+'」（1文字も変えない）':'画像の中のセリフをそのまま使う。')+'\n\n'
+  +'【ほかの希望】\n'+(extra||'直すところ以外は変えない。')+'\n\n'
+  +'【絶対ルール】\n1. 直すところ以外は、できるだけ変えない。\n2. 文字は指定どおり正確に。ほかの文字や飾りを足さない。\n3. 顔・体型・配色・線のタッチは添付画像に合わせる。\n4. 絵や文字を端で切らず、まわりに余白をとる。\n5. 背景は真っ白の単色。白いふちどりは付けない。\n6. スタンプは1個だけ。\n7. 説明だけで終わらず、必ず画像を出す。';
+}
+function selectedPngPromise(){
+  const s=slices[selIdx]; if(!s||!s.content) return null;
+  const c=document.createElement('canvas'), pad=24; c.width=s.content.width+pad*2; c.height=s.content.height+pad*2;
+  const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(s.content,pad,pad);
+  return canvasBlob(c);
+}
+$('runFix').onclick=()=>{ if(selIdx<0) return; const p=buildFixPrompt(); openChat(p,'fixStatus',{type:'fix',n:slices[selIdx].n},selectedPngPromise()); };
+$('copyFixPrompt').onclick=()=>copyTextNow(buildFixPrompt()).then(ok=>setStatus('fixStatus',ok?'お願いの文をコピーしました。':'コピーできませんでした。',ok?'ok':'warn'));
+$('pasteFix').onclick=()=>{ if(selIdx<0) return; setExpect({type:'fix',n:slices[selIdx].n}); smartPaste(); };
+$('fixFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(f&&selIdx>=0) setFix(slices[selIdx].n,f); e.target.value=''; });
+async function setFix(n,blob){
+  let img; try{ img=await loadImg(blob); }catch(e){ toast('画像を読み込めませんでした。',true); return; }
+  fixImgs[n]=img; if(!state.fixes.includes(n)) state.fixes.push(n);
+  await IDB.put('fix_'+n,blob);
+  setExpect(null); saveState(); rebuildSlices();
+  const i=slices.findIndex(s=>s.n===n); if(i>=0) selectSlice(i,true);
+  showTab('files');
+  toast('✅ '+String(n+1).padStart(2,'0')+'を直した画像に入れかえました');
+}
+
+// ZIP
+$('downloadZip').onclick=async()=>{
+  if(!slices.length){ setStatus('imageStatus','先に③で画像を入れてください。','warn'); return; }
+  if(!window.JSZip){ setStatus('imageStatus','ZIPの機能を読み込めませんでした。通信を確認して、ページを開き直してください。','err'); return; }
+  const btn=$('downloadZip'); btn.disabled=true; setStatus('imageStatus','ZIPを作っています…');
+  try{
+    const zip=new JSZip();
+    for(let i=0;i<slices.length;i++){
+      const blob=await canvasBlob(renderTo(slices[i].content,OUT_W,OUT_H));
+      if(blob.size>1024*1024) throw Error(String(i+1).padStart(2,'0')+'.png が1MBをこえました');
+      zip.file(String(i+1).padStart(2,'0')+'.png',blob);
+    }
+    const main=slices[Math.min(state.mainIdx,slices.length-1)];
+    zip.file('main.png',await canvasBlob(renderTo(main.content,240,240)));
+    zip.file('tab.png',await canvasBlob(renderTo(main.content,96,74,{pad:2})));
+    const blob=await zip.generateAsync({type:'blob'});
+    if(blob.size>60*1024*1024) throw Error('ZIPが60MBをこえました');
+    const name=(val('character')||'sticker').replace(/[\\/:*?"<>|\s]/g,'_')+'_LINE申請用.zip';
+    const url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
+    const need=Number(val('count'));
+    setStatus('imageStatus','ZIPを保存しました（'+slices.length+'個＋main.png＋tab.png）。'+(slices.length!==need?'\n⚠ 必要な数（'+need+'個）とちがいます。':'')+'\n申請前に、文字・切れ・透明になりすぎていないかを確認してね。',slices.length===need?'ok':'warn');
+  }catch(e){ setStatus('imageStatus','ZIPを作れませんでした：'+e.message,'err'); }
+  finally{ btn.disabled=false; }
+};
+
+/* =========================================================
+   8. ⑤ タイトル（ChatGPTなしの仮の文・チェック）
+   ========================================================= */
+function weightedLength(s){ let n=0; for(const ch of s) n+=/[^\u0000-ÿ]/.test(ch)?2:1; return n; }
+$('generateSeo').onclick=()=>{
+  const k=val('seoKeyword'), ch=val('character'), aud=val('audience'), use=val('usecase'), diff=val('differentiator');
+  if(val('seoLang')==='en'){ $('seoTitle').value=ch+' Stickers'; $('seoDesc').value='Stickers of '+ch+' for '+use+'. Easy-to-use expressions for everyday messages.'; }
+  else{ $('seoTitle').value=k||(ch+'のスタンプ'); $('seoDesc').value=ch+'のスタンプです。'+aud+'向けに、'+use+'で使いやすい表情やセリフをそろえました。'+(diff?diff+'。':''); }
+  checkSeo(); saveFieldsSoon();
+};
+function checkSeo(){
+  const t=$('seoTitle').value.trim(), d=$('seoDesc').value.trim(), issues=[];
+  if(!t||!d) issues.push('タイトルか説明文が空です');
+  if(weightedLength(t)>40) issues.push('タイトルが40文字換算をこえています（今：'+weightedLength(t)+'）');
+  if(weightedLength(d)>160) issues.push('説明文が160文字換算をこえています（今：'+weightedLength(d)+'）');
+  setStatus('seoStatus',issues.length?'⚠ '+issues.join('\n⚠ '):'文字数OK（タイトル '+weightedLength(t)+'／説明文 '+weightedLength(d)+'）。最新の公式ルールも確認してね。',issues.length?'warn':'ok');
+}
+$('checkSeo').onclick=checkSeo;
+$('copySeo').onclick=()=>copyTextNow('タイトル：'+$('seoTitle').value+'\n説明文：'+$('seoDesc').value+'\nクリエイター名：'+$('creatorName').value+'\nコピーライト：'+$('copyright').value).then(ok=>setStatus('seoStatus',ok?'コピーしました。':'コピーできませんでした。',ok?'ok':'warn'));
+$('openGuideline').onclick=()=>openLink('https://creator.line.me/ja/guideline/sticker/');
+['openCreators','openCreatorsTop'].forEach(id=>$(id).onclick=()=>openLink('https://creator.line.me/ja/'));
+['openStore','openStoreTop'].forEach(id=>$(id).onclick=()=>openLink('https://store.line.me/stickershop/home/ja'));
+
+// データ
+$('exportProject').onclick=()=>{ const blob=new Blob([JSON.stringify({version:2,updatedAt:new Date().toISOString(),fields:collectFields(),state:{mainIdx:state.mainIdx}},null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url; a.download='sticker-project_v2.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),3000); };
+$('importProject').addEventListener('change',async e=>{ const f=e.target.files[0]; if(!f) return; try{ const d=JSON.parse(await f.text()); applyFields(d.fields||{}); score(); checkLines(); renderBatches(); saveFieldsSoon(); setStatus('dataStatus','読み込みました。','ok'); }catch(err){ setStatus('dataStatus','読み込めませんでした（JSONの形がちがいます）。','err'); } e.target.value=''; });
+$('resetAll').onclick=async()=>{ if(!confirm('入力も画像も、ぜんぶ消して最初からにしますか？')) return; try{ localStorage.removeItem(LS_FIELDS); localStorage.removeItem(LS_STATE); }catch(e){} await IDB.clear(); location.reload(); };
+
+/* =========================================================
+   9. 貼り付けの窓口（どこから貼っても、自動で正しい場所へ）
+   ========================================================= */
+function setExpect(ex){ state.expect=ex; saveState(); updateExpectLabel(); document.querySelectorAll('.batch').forEach(el=>el.classList.remove('expect')); }
+function updateExpectLabel(){
+  const ex=state.expect; let t='';
+  if(ex?.type==='research') t='待っている返事：①市場調査';
+  else if(ex?.type==='plan') t='待っている返事：②企画とセリフ';
+  else if(ex?.type==='seo') t='待っている返事：⑤タイトル';
+  else if(ex?.type==='sheet') t='待っている画像：③ '+(ex.idx+1)+'枚目';
+  else if(ex?.type==='fix') t='待っている画像：④ '+String(ex.n+1).padStart(2,'0')+'を直した画像';
+  $('expectLabel').textContent=t;
+}
+async function handleImage(blob){
+  const ex=state.expect;
+  if(ex?.type==='fix') return setFix(ex.n,blob);
+  if(ex?.type==='sheet') return setSheet(ex.idx,blob);
+  const empty=batchDefs().find(d=>!sheetImgs[d.idx]);
+  if(empty) return setSheet(empty.idx,blob);
+  toast('画像の入れ先が分かりませんでした。③の「○枚目」の「画像を貼り付け」から入れてね。',true);
+}
+async function smartPaste(){
+  try{
+    if(navigator.clipboard && navigator.clipboard.read){
+      const items=await navigator.clipboard.read();
+      for(const it of items){
+        const imgType=it.types.find(t=>t.startsWith('image/'));
+        if(imgType){ await handleImage(await it.getType(imgType)); return; }
+      }
+      for(const it of items){
+        if(it.types.includes('text/plain')){ const text=await (await it.getType('text/plain')).text(); if(text.trim()){ handleText(text); return; } }
+      }
+      throw Error('empty');
+    }else if(navigator.clipboard && navigator.clipboard.readText){
+      const text=await navigator.clipboard.readText();
+      if(text.trim()){ handleText(text); return; }
+      throw Error('empty');
+    }
+    throw Error('no api');
+  }catch(e){
+    openModal();
+  }
+}
+function openModal(){ $('pasteArea').value=''; $('pasteModal').classList.add('show'); setTimeout(()=>$('pasteArea').focus(),50); }
+function closeModal(){ $('pasteModal').classList.remove('show'); }
+$('closeModal').onclick=closeModal;
+$('pasteModal').addEventListener('click',e=>{ if(e.target.id==='pasteModal') closeModal(); });
+$('pasteMain').onclick=smartPaste;
+document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click',()=>{ setExpect({type:b.dataset.paste}); smartPaste(); }));
+$('pasteArea').addEventListener('input',()=>{ const t=$('pasteArea').value; if(t.trim().length>5){ closeModal(); handleText(t); } });
+$('pasteFile').addEventListener('change',async e=>{
+  const files=[...e.target.files]; e.target.value=''; closeModal();
+  for(const f of files) await handleImage(f);
+});
+// どこで貼り付けても受け取る（入力欄の中は、ふつうの貼り付け）
+document.addEventListener('paste',e=>{
+  const t=e.target, inModal=t&&t.id==='pasteArea';
+  if(!inModal && t && t.closest && t.closest('input,textarea,select,[contenteditable]')) return;
+  const cd=e.clipboardData; if(!cd) return;
+  const file=[...cd.files||[]].find(f=>f.type.startsWith('image/'));
+  if(file){ e.preventDefault(); closeModal(); handleImage(file); return; }
+  const text=cd.getData('text/plain');
+  if(text && text.trim()){ e.preventDefault(); closeModal(); handleText(text); }
+});
+// ドラッグ＆ドロップ（パソコン用）
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',async e=>{ e.preventDefault(); const files=[...(e.dataTransfer?.files||[])].filter(f=>f.type.startsWith('image/')); for(const f of files) await handleImage(f); });
+
+/* =========================================================
+   10. 起動
+   ========================================================= */
+(async function init(){
+  applyFields(lsGet(LS_FIELDS,null));
+  if(!val('researchDate')) $('researchDate').value=today();
+  state=Object.assign({sheets:{},fixes:[],mainIdx:0,expect:null},lsGet(LS_STATE,{}));
+  score();
+  document.addEventListener('input',e=>{ if(e.target.id!=='pasteArea') saveFieldsSoon(); });
+  document.addEventListener('change',e=>{ if(e.target.id!=='pasteArea') saveFieldsSoon(); });
+  ['lines','count','perSheet','poses'].forEach(id=>$(id).addEventListener('change',()=>{ renderBatches(); drawPreview(); }));
+  if($('lines').value.trim()) checkLines();
+  // 画像をもどす
+  for(const k of Object.keys(state.sheets)){ const b=await IDB.get('sheet_'+k); if(b){ try{ sheetImgs[k]=await loadImg(b); }catch(e){} } else delete state.sheets[k]; }
+  for(const n of [...state.fixes]){ const b=await IDB.get('fix_'+n); if(b){ try{ fixImgs[n]=await loadImg(b); }catch(e){} } else state.fixes=state.fixes.filter(x=>x!==n); }
+  saveState(); renderBatches(); rebuildSlices(); updateExpectLabel();
+})();
+</script>
+</body>
+</html>
