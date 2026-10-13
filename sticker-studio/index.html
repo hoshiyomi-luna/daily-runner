@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#17243b">
 <title>STICKER STUDIO｜LINEスタンプ制作ツール</title>
 <!--
-  STICKER STUDIO v3
+  STICKER STUDIO v4
   ・APIなし（お金がかからない）。ChatGPTとの行き来は「押す → 貼る」だけ。
   ・ChatGPTの返事は、決まった形（[[STICKER_STUDIO:種類]]）のコードブロックで受け取り、自動で欄に入れる。
   ・画像は「画像を貼り付け」または「写真から選ぶ」で入れると、自動で切り分け・透明化・ふちどりをする。
@@ -135,6 +135,24 @@ details summary{font-size:12px;color:var(--muted);cursor:pointer}
 
 <!-- ===================== ① 市場調査 ===================== -->
 <section id="research" class="panel active">
+  <div class="card" style="border:2px solid var(--gold)">
+    <h2>📷 写真1枚から全部作る</h2>
+    <p class="sub">写真を入れてボタンを押すだけ。ChatGPTが写真を見て、Web検索で市場調査をして、企画・セリフ・タイトル・説明文まで一度に作ります。返事を貼ると①②⑤の全部の欄に入り、③で写真をもとにした絵を作れます。</p>
+    <div class="actions">
+      <span class="filebtn btn secondary">写真を選ぶ<input type="file" id="photoFile" accept="image/*"></span>
+      <button class="btn secondary" id="photoPaste">写真を貼り付け</button>
+      <button class="btn danger" id="photoDel" style="display:none">写真を消す</button>
+    </div>
+    <img id="photoThumb" alt="" style="display:none;max-width:100%;max-height:220px;margin-top:10px;border-radius:10px;border:1px solid var(--line)">
+    <div class="field" style="margin-top:10px"><label>写真について一言（空でもOK）</label><input id="photoMemo" placeholder="空でOK"></div>
+    <div class="flow">
+      <div class="step"><div class="num">1</div><div class="txt">お願いの文はChatGPTに入り、写真はコピーされます。入力欄を長押し→ペーストで写真を貼って送信</div><button class="btn gold" id="runPhoto">ChatGPTで写真から作る</button></div>
+      <div class="step"><div class="num">2</div><div class="txt">返事の枠の「コピー」→ ここに戻る</div><button class="btn" data-paste="photo">返事を貼り付け</button></div>
+    </div>
+    <div id="photoStatus" class="status"></div>
+    <div class="field" style="margin-top:10px"><label>写真の特徴（自動で入ります・③の絵に使います）</label><textarea id="photoFeatures" style="min-height:60px"></textarea></div>
+    <details><summary>ChatGPTに送ったお願いの文を見る</summary><div class="output" id="photoPrompt">まだ作っていません。</div><div class="actions"><button class="btn secondary" data-copyout="photoPrompt" data-status="photoStatus">お願いの文をコピー</button></div></details>
+  </div>
   <div class="card">
     <h2>① 市場調査</h2>
     <p class="sub">ChatGPTにWeb検索で調べてもらい、結果を貼り付けると、この下と②の欄に自動で入ります。</p>
@@ -225,6 +243,10 @@ details summary{font-size:12px;color:var(--muted);cursor:pointer}
           <option value="24">24個ずつ（横4×縦6）</option>
           <option value="40">40個まとめて（横5×縦8・文字がくずれやすい）</option>
         </select>
+      </div>
+      <div class="field"><label>写真から作るとき</label>
+        <label style="font-weight:400;font-size:13px"><input type="checkbox" id="refPhoto" checked> 1枚目を作る時に、📷の写真も「見本」として一緒にコピーする</label>
+        <span class="small">写真の色・模様・形をキャラクターに残しやすくなります（写真を入れた時だけ）。</span>
       </div>
       <div class="field"><label>別のアカウントで続きを作るとき</label>
         <label style="font-weight:400;font-size:13px"><input type="checkbox" id="refImage"> 1枚目の画像も「見本」として一緒にコピーする</label>
@@ -359,7 +381,7 @@ details summary{font-size:12px;color:var(--muted);cursor:pointer}
   </div>
 </section>
 
-<div class="footer">STICKER STUDIO v3 · 公開前に公式規定・画像内容を最終確認してください。</div>
+<div class="footer">STICKER STUDIO v4 · 公開前に公式規定・画像内容を最終確認してください。</div>
 </div>
 
 <!-- いつでも押せる「貼り付け」ボタン -->
@@ -425,7 +447,7 @@ function markDone(tab){ const b=document.querySelector('.nav button[data-tab="'+
 /* =========================================================
    2. 自動保存（文字＝localStorage／画像＝IndexedDB）
    ========================================================= */
-const FIELD_IDS=['market','researchDate','keywords','marketResult','evidence','competitors','sourceUrl','sDemand','sDiff','sUse','sSeo','sCost','character','species','audience','usecase','style','count','differentiator','hypothesis','concept','lines','poses','perSheet','refImage','whiteTransparent','addOutline','autoCut','seoKeyword','seoLang','creatorName','copyright','seoTitle','seoDesc','seoCandidates','fixExtra'];
+const FIELD_IDS=['photoMemo','photoFeatures','refPhoto','market','researchDate','keywords','marketResult','evidence','competitors','sourceUrl','sDemand','sDiff','sUse','sSeo','sCost','character','species','audience','usecase','style','count','differentiator','hypothesis','concept','lines','poses','perSheet','refImage','whiteTransparent','addOutline','autoCut','seoKeyword','seoLang','creatorName','copyright','seoTitle','seoDesc','seoCandidates','fixExtra'];
 function lsGet(k,def){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
 function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
 function collectFields(){
@@ -482,7 +504,8 @@ function openChat(prompt, statusId, expect, imagePromise=null){
   if(!prompt || !prompt.trim()){ setStatus(statusId,'先にお願いの文を作れませんでした。欄を確認してください。','warn'); return; }
   const enc=encodeURIComponent(prompt);
   const inUrl=enc.length<=URL_LIMIT;
-  const url=inUrl ? CHAT_URL+'?q='+enc : CHAT_URL;
+  const search=expect && ['research','photo','seo'].includes(expect.type);
+  const url=inUrl ? CHAT_URL+'?q='+enc+(search?'&hints=search':'') : CHAT_URL;
   let copyP, kind;
   if(imagePromise && inUrl && navigator.clipboard && window.ClipboardItem){
     kind='image';
@@ -502,6 +525,7 @@ function openChat(prompt, statusId, expect, imagePromise=null){
       msg = (inUrl ? 'ChatGPTを開きました。お願いの文は入力済みです。' : 'お願いの文が長いので、URLには入れていません。')
           + (ok ? '\n入っていなかったら、入力欄を長押し →「ペースト」で貼って送信してください（コピー済み）。' : '\nコピーできませんでした。下の「お願いの文を見る」から長押しでコピーしてください。');
     }
+    if(imagePromise && kind==='text') msg+='\n⚠ お願いの文が長いので、画像は自動でコピーしていません。画像はChatGPTの＋ボタンから添付してください。';
     msg+='\n返事が来たら、枠の「コピー」→ ここに戻って「📋 返事を貼り付け」。';
     setStatus(statusId,msg,ok?'ok':'warn');
   });
@@ -579,6 +603,13 @@ function applySeo(f){
   checkSeo(); markDone('seo');
   return '⑤のタイトルと説明文を入れました';
 }
+function applyPhoto(f){
+  setIf('photoFeatures',f.features);
+  applyResearch(f); applyPlan(f); applySeo(f);
+  markDone('research'); markDone('plan');
+  setStatus('photoStatus','写真から、調査・企画・セリフ（'+linesArr().length+'個）・タイトルまで入れました。③で絵を作れます。','ok');
+  return '写真から全部入れました（セリフ'+linesArr().length+'個）→ ③で絵を作ります';
+}
 function handleText(text){
   const p=parseReply(text);
   if(!p){
@@ -586,6 +617,7 @@ function handleText(text){
     const ex=state.expect?.type;
     if(ex==='research'){ $('marketResult').value=text.trim(); saveFieldsSoon(); toast('返事の形（[[STICKER_STUDIO]]）が見つからなかったので、①のまとめ欄にそのまま入れました。\n次からは返事の最後の枠の「コピー」を押してね。'); showTab('research'); return; }
     if(ex==='plan'){ const {lines,poses}=cleanLineItems(text); $('concept').value=text.trim(); if(lines.length>=4&&lines.length<=60){ $('lines').value=lines.join('\n'); $('poses').value=poses.join('\n'); } saveFieldsSoon(); toast('返事の形が見つからなかったので、②にそのまま入れました。セリフ欄を確認してね。'); showTab('plan'); checkLines(); return; }
+    if(ex==='photo'){ $('marketResult').value=text.trim(); saveFieldsSoon(); toast('返事の形が見つからなかったので、①のまとめ欄にそのまま入れました。\n返事の最後の枠の「コピー」を押して、もう一度貼ってね。',true); showTab('research'); return; }
     if(ex==='seo'){ $('seoCandidates').value=text.trim(); saveFieldsSoon(); toast('返事の形が見つからなかったので、⑤の候補欄にそのまま入れました。'); showTab('seo'); return; }
     toast('ChatGPTの返事の形が見つかりませんでした。\n返事の最後の枠（コードブロック）の「コピー」を押してから貼り付けてね。',true);
     return;
@@ -594,6 +626,7 @@ function handleText(text){
   if(p.kind==='research'){ msg=applyResearch(p.f); next='plan'; }
   else if(p.kind==='plan'){ msg=applyPlan(p.f); next='prompt'; }
   else if(p.kind==='seo'){ msg=applySeo(p.f); next='seo'; }
+  else if(p.kind==='photo'){ msg=applyPhoto(p.f); next='prompt'; }
   else { toast('知らない種類の返事でした：'+p.kind,true); return; }
   setExpect(null);
   saveFieldsSoon();
@@ -665,6 +698,62 @@ function buildSeoPrompt(){
     ['reason','選んだ理由と弱点']
   ]);
 }
+/* ---------- 📷 写真から全部 ---------- */
+let photoImg=null;
+function showPhoto(){ const t=$('photoThumb'); if(photoImg){ t.src=photoImg.src; t.style.display='block'; $('photoDel').style.display='inline-block'; } else { t.removeAttribute('src'); t.style.display='none'; $('photoDel').style.display='none'; } }
+async function setPhoto(blob){
+  try{ photoImg=await loadImg(blob); }catch(e){ toast('写真を読み込めませんでした。',true); return; }
+  await IDB.put('photo',blob); setExpect(null); showPhoto(); showTab('research');
+  toast('✅ 写真を入れました。金色の「ChatGPTで写真から作る」を押してね。');
+}
+// ChatGPTに貼る用：大きすぎる写真は小さくしてPNGにする
+function photoPng(){
+  const s=Math.min(1,1600/Math.max(photoImg.naturalWidth,photoImg.naturalHeight));
+  const c=document.createElement('canvas'); c.width=Math.round(photoImg.naturalWidth*s); c.height=Math.round(photoImg.naturalHeight*s);
+  const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(photoImg,0,0,c.width,c.height);
+  return canvasBlob(c);
+}
+$('photoFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) setPhoto(f); e.target.value=''; });
+$('photoPaste').onclick=()=>{ setExpect({type:'photoInput'}); smartPaste(); };
+$('photoDel').onclick=async()=>{ if(!confirm('写真を消しますか？')) return; photoImg=null; await IDB.del('photo'); showPhoto(); };
+function buildPhotoPrompt(){
+  const n=Number(val('count'));
+  return '添付した写真をもとに、売れるLINEスタンプ（'+n+'個セット）を企画してください。決める前に、必ずWeb検索を何回も使って、しっかり市場調査をしてください。\n'
+  +'調査日：'+(val('researchDate')||today())+'／市場：'+val('market')+'\n'
+  +(val('photoMemo')?'写真についてのメモ：'+val('photoMemo')+'\n':'')
+  +(val('keywords')?'気になっているキーワード：'+val('keywords')+'\n':'')
+  +'\n【手順】\n'
+  +'1. 写真を見る：写っているものと、その特徴（色・模様・形・表情・雰囲気）を書き出す。\n'
+  +'2. 市場調査（Web検索を何回も使う）：写真のテーマに関係する言葉でLINE STOREを検索し、上位やランキングに出る実在の商品を最大10件、商品名・URL・特徴で比べる。関連する検索語、よく使われるセリフの傾向、競合が多いところ・足りないところをまとめる。確認できないことは「確認できず」と書き、商品・URL・順位・販売数を作り出さない。\n'
+  +'3. 企画：調査の根拠から、買う人・使う場面・差別化を決める。案を3つ比べて、いちばん売れそうな1つを選ぶ。キャラクターは写真の特徴を残してスタンプ向けにデフォルメする。\n'
+  +'4. セリフ：ちょうど'+n+'個。調査でわかった「よく買われる用途」と「足りない用途」にもとづいて決める。重ならない・短い・買う人が実際のトークで使う言葉。セリフごとに表情・ポーズ。\n'
+  +'5. タイトル・説明文：調査で見つけた、実際に検索されている言葉を自然に入れる。タイトルは40文字換算以内、説明文は160文字換算以内。根拠のない「人気No.1」などは使わない。\n'
+  +'6. 写真が実在の人なら、本人の許可が必要なことを注意に書く。写真が既存のキャラクター・ブランド・他人の作品なら、似せずに別の案にする。\n'
+  +'7. 返事の形の説明文は書き方の説明です。内容のヒントではないので、引っ張られないでください。'
+  +replyFormat('photo',[
+    ['features','写真の特徴（色・模様・形など。絵を描く時に残すもの）'],
+    ['summary','調査のまとめ（事実と推測を分けて。選んだ案と理由も）'],
+    ['evidence','確認できた事実（商品名・URL・特徴を1行に1件）'],
+    ['competitors','競合が多いところ／足りない用途'],
+    ['sources','参照したURL（1行に1つ）'],
+    ['keywords','狙う検索キーワード（スペース区切り）'],
+    ['character','キャラクター名'],['species','種類'],['audience','買う人・使う人'],['usecase','使う場面'],['style','画風'],
+    ['differentiator','差別化ポイント'],['hypothesis','企画の仮説（根拠と仮説を分けて）'],
+    ['concept','企画のまとめ'],
+    ['lines','セリフ｜表情・ポーズ\n（1行に1個、ちょうど'+n+'行。番号はつけない）'],
+    ['notes','著作権・肖像・審査で気をつけること'],
+    ['title','いちばん良いタイトル（1つだけ）'],
+    ['description','いちばん良い説明文（1つだけ）'],
+    ['candidates','ほかのタイトル・説明文の候補（文字数つき）'],
+    ['reason','タイトルを選んだ理由と弱点'],
+    ['score','根拠: ?/30\n差別化: ?/25\n使いやすさ: ?/20\n検索: ?/15\n実現性: ?/10\n（? を点数に書きかえる）']
+  ]);
+}
+$('runPhoto').onclick=()=>{
+  const p=buildPhotoPrompt(); $('photoPrompt').textContent=p;
+  if(!photoImg){ setStatus('photoStatus','先に「写真を選ぶ」か「写真を貼り付け」で写真を入れてください。','warn'); return; }
+  openChat(p,'photoStatus',{type:'photo'},photoPng());
+};
 $('runResearch').onclick=()=>{ const p=buildResearchPrompt(); $('researchPrompt').textContent=p; openChat(p,'researchStatus',{type:'research'}); };
 $('runPlan').onclick=()=>{ const p=buildPlanPrompt(); $('planPrompt').textContent=p; openChat(p,'planStatus',{type:'plan'}); };
 $('runSeo').onclick=()=>{ const p=buildSeoPrompt(); $('seoPrompt').textContent=p; openChat(p,'seoStatus',{type:'seo'}); };
@@ -701,9 +790,11 @@ function batchDefs(){
   return out;
 }
 function shapeOf(cols,rows){ const r=(cols*1.16)/rows; return r>1.25?'横長（3:2）':(r<0.8?'縦長（2:3）':'正方形（1:1）'); }
-function buildSheetPrompt(b,total,useRef){
+function buildSheetPrompt(b,total,useRef,usePhoto){
   const lines=b.items.map((x,i)=>(b.start+i+1)+'. 「'+x+'」'+(b.poses[i]?' — '+b.poses[i]:' — セリフに合う表情とポーズ')).join('\n');
   return '画像を1枚生成してください。LINEスタンプの一覧画像（'+(b.idx+1)+'枚目／全'+total+'枚）です。\n'
+  +(usePhoto?'\n【添付写真が見本】添付した写真をもとにキャラクターを描いてください。写真の色・模様・形などの特徴は残し、スタンプ向けにかわいくデフォルメしてください（写真をそのまま貼らない）。\n':'')
+  +(val('photoFeatures')?'【写真の特徴（必ず残す）】'+val('photoFeatures')+'\n':'')
   +(b.idx>0||useRef?'\n【前と同じキャラクター】'+(useRef?'添付した見本画像':'この会話で前に作った画像')+'とまったく同じキャラクター・画風・色・線の太さで描いてください。\n':'')
   +'\n【キャラクター】\n名前：'+orAuto('character')+'\n種類：'+orAuto('species')+'\n画風：'+(val('style')||'この企画に合う、スタンプで見やすい画風（1枚目で決めたら、そのあとも同じ）')+'\n'
   +'\n【並べ方】\n横'+b.cols+'個×縦'+b.rows+'段＝'+b.count+'個。画像の形：'+shapeOf(b.cols,b.rows)+'。\n'
@@ -738,8 +829,9 @@ function renderBatches(){
     const go=document.createElement('button'); go.className='btn gold'; go.textContent='ChatGPTで'+(b.idx+1)+'枚目を作る';
     go.onclick=()=>{
       const useRef=$('refImage').checked && sheetImgs[0] && b.idx>0;
-      const p=buildSheetPrompt(b,total,useRef);
-      openChat(p,'promptStatus',{type:'sheet',idx:b.idx}, useRef?pngBlobOf(sheetImgs[0],'#fff'):null);
+      const usePhoto=!useRef && b.idx===0 && $('refPhoto').checked && photoImg;
+      const p=buildSheetPrompt(b,total,useRef,usePhoto);
+      openChat(p,'promptStatus',{type:'sheet',idx:b.idx}, useRef?pngBlobOf(sheetImgs[0],'#fff'):(usePhoto?photoPng():null));
       renderBatches();
     };
     const paste=document.createElement('button'); paste.className='btn'; paste.textContent='画像を貼り付け';
@@ -1007,12 +1099,15 @@ function updateExpectLabel(){
   else if(ex?.type==='plan') t='待っている返事：②企画とセリフ';
   else if(ex?.type==='seo') t='待っている返事：⑤タイトル';
   else if(ex?.type==='sheet') t='待っている画像：③ '+(ex.idx+1)+'枚目';
+  else if(ex?.type==='photo') t='待っている返事：📷写真から全部';
+  else if(ex?.type==='photoInput') t='待っている画像：📷写真';
   else if(ex?.type==='fix') t='待っている画像：④ '+String(ex.n+1).padStart(2,'0')+'を直した画像';
   $('expectLabel').textContent=t;
 }
 async function handleImage(blob){
   const ex=state.expect;
   if(ex?.type==='fix') return setFix(ex.n,blob);
+  if(ex?.type==='photoInput') return setPhoto(blob);
   if(ex?.type==='sheet') return setSheet(ex.idx,blob);
   const empty=batchDefs().find(d=>!sheetImgs[d.idx]);
   if(empty) return setSheet(empty.idx,blob);
@@ -1080,6 +1175,7 @@ document.addEventListener('drop',async e=>{ e.preventDefault(); const files=[...
   if($('lines').value.trim()) checkLines();
   // 画像をもどす
   for(const k of Object.keys(state.sheets)){ const b=await IDB.get('sheet_'+k); if(b){ try{ sheetImgs[k]=await loadImg(b); }catch(e){} } else delete state.sheets[k]; }
+  { const b=await IDB.get('photo'); if(b){ try{ photoImg=await loadImg(b); showPhoto(); }catch(e){} } }
   for(const n of [...state.fixes]){ const b=await IDB.get('fix_'+n); if(b){ try{ fixImgs[n]=await loadImg(b); }catch(e){} } else state.fixes=state.fixes.filter(x=>x!==n); }
   saveState(); renderBatches(); rebuildSlices(); updateExpectLabel();
 })();
