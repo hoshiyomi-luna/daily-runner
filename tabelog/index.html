@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="origin">
+<meta name="robots" content="noindex, nofollow">
+<title>食べログ案件</title>
+<style>
+  html,body{margin:0;height:100%;background:#FFF7EF;overflow:hidden}
+  iframe{position:fixed;inset:0;width:100%;height:100%;border:0;display:block}
+</style>
+</head>
+<body>
+<!-- 食べログ案件のアプリ（Google Apps Script）を、上の帯を出さずに開くための入り口。アプリの中身は、すべてGoogle側にある -->
+<iframe id="app" title="食べログ案件" allow="clipboard-read; clipboard-write; camera; fullscreen"></iframe>
+<script>
+  var EXEC = 'https://script.google.com/macros/s/AKfycbzi366QERtzvePCrc5sSGRm9YRfULgO4KMojrnrP4UY9p4qdJEYcvStgDhnGPVii0un/exec';
+  var q = location.search || '';
+  if (/[?&]a=/.test(q)) document.title = '食べログ案件｜管理';
+  document.getElementById('app').src = EXEC + q;
+</script>
+</body>
+</html>
